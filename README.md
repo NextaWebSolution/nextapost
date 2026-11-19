@@ -1,31 +1,161 @@
-# NextaPost — self-hosted social media content calendar
+<div align="center">
 
-Plan, approve and publish social media posts from one calendar. Built in plain **PHP 8 + MySQL + Tailwind CSS + Alpine.js** so it runs on ordinary **cPanel hosting**: no Docker, Node, Redis or queue daemon needed.
+<img src="docs/screenshots/banner.png" alt="NextaPost — self-hosted social media scheduler and content calendar for LinkedIn, Instagram, Facebook, X and Telegram" width="100%">
 
-By **Nexta Web Solution Pvt. Ltd.** · Version 1.0.1
+# NextaPost — Self-Hosted Social Media Scheduler & Content Calendar
+
+**Plan, approve and publish posts to LinkedIn, Instagram, Facebook, X (Twitter), Telegram, Discord, Mastodon and Bluesky from one calendar, on your own cPanel hosting.**
+
+Built with plain **PHP 8 + MySQL + Tailwind CSS + Alpine.js**. No Docker, Node.js, Redis or monthly SaaS fees.
+
+[![Version](https://img.shields.io/badge/version-1.1.2-7c3aed?style=flat-square)](CHANGELOG.md)
+[![PHP](https://img.shields.io/badge/PHP-8.1%2B-777bb4?style=flat-square&logo=php&logoColor=white)](#requirements)
+[![MySQL](https://img.shields.io/badge/MySQL-5.7%2B%20%7C%20MariaDB-4479a1?style=flat-square&logo=mysql&logoColor=white)](#requirements)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)](#development)
+[![Alpine.js](https://img.shields.io/badge/Alpine.js-3-8bc0d0?style=flat-square&logo=alpinedotjs&logoColor=white)](#development)
+[![cPanel ready](https://img.shields.io/badge/cPanel-ready-ff6c2c?style=flat-square&logo=cpanel&logoColor=white)](#install-on-cpanel-about-5-minutes)
+[![Security audited](https://img.shields.io/badge/security-audited-16a34a?style=flat-square)](SECURITY-AUDIT.md)
+
+[Features](#features) · [Screenshots](#screenshots) · [Supported networks](#supported-social-networks) · [Recommended hosting](#recommended-hosting) · [Install](#install-on-cpanel-about-5-minutes) · [FAQ](#faq)
+
+<p>
+  <sub>A product by</sub><br>
+  <a href="https://nextawebsolution.com"><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/nexta-logo-dark.png">
+    <img src="docs/brand/nexta-logo.png" alt="Nexta Web Solution" height="44">
+  </picture></a>
+</p>
+
+</div>
 
 ---
 
-## Features (v1.1)
+## Why NextaPost?
+
+NextaPost is a **self-hosted alternative to Buffer, Hootsuite and Postiz** for agencies, brands and small teams who want to own their social media workflow and data.
+
+- 🗓️ **One content calendar for every channel**: week, month and list views with drag-and-drop rescheduling.
+- ✅ **Team approvals**: contributors draft, approvers sign off, and nothing goes live by accident.
+- 📑 **LinkedIn document carousels**: post a PDF or PowerPoint as a swipeable slide post on profiles and company Pages.
+- 🔒 **Your server, your data**: tokens are encrypted and files stay private, with no third-party SaaS in between.
+- 🧩 **Runs on ordinary shared hosting**: upload, open the web installer, add one cron job. Done.
+
+## Recommended hosting
+
+NextaPost runs on any cPanel host with PHP 8.1+ and MySQL. For the smoothest setup we recommend **[TPHOST by The PowerHost](https://thepowerhost.in/?utm_source=github&utm_medium=readme&utm_campaign=nextapost)**: fast Indian cloud and cPanel hosting from a Noida datacenter, with NVMe SSD storage, LiteSpeed + LSCache, daily backups, a 99.9% uptime SLA and 24×7 human support.
+
+<a href="https://thepowerhost.in/?utm_source=github&utm_medium=readme&utm_campaign=nextapost"><img src="docs/screenshots/tphost-recommended.png" alt="Recommended hosting for NextaPost: TPHOST by The PowerHost — NVMe SSD, LiteSpeed, Noida datacenter, 99.9% uptime SLA, daily backups, 24x7 support" width="100%"></a>
+
+## Features
 
 | Area | What you get |
 |---|---|
-| **Calendar** | Week / Month / List views, drag-and-drop rescheduling, unscheduled-drafts panel, "now" line, per-workspace time zone, keyboard shortcuts (← → T N) |
-| **Composer** | One text for all channels plus per-channel customisation, live character counters per network (X counts links as 23), media upload and library, reordering, live preview, Post now / Schedule / Draft / Submit for review |
-| **Documents & carousels** | Upload PDF, PowerPoint (PPTX) or Word (DOCX) and post it as a swipeable document on LinkedIn (profiles and Pages), or as a file on Telegram and Discord. Different media per channel in one post (e.g. the PDF for LinkedIn, the slides as images for Instagram). Files are scanned (no scripts, macros, embedded files, encryption or remote templates) and kept private. |
-| **Networks** | Facebook Pages, Instagram (feed, carousel, Reels), LinkedIn profiles and company Pages, X/Twitter, Telegram, Discord, Mastodon, Bluesky, plus a Sandbox test channel |
-| **Teams & agencies** | Unlimited workspaces (one per client/brand), roles (Admin, Editor, Contributor, Approver, Viewer), approval workflow with "request changes" notes, activity log |
+| **Content calendar** | Week / Month / List views, drag-and-drop rescheduling, unscheduled-drafts panel, "now" line, per-workspace time zone, keyboard shortcuts (← → T N) |
+| **Post composer** | One text for all channels plus per-channel edits, live character counters per network (X counts links as 23), media upload and library, live post preview, Post now / Schedule / Draft / Submit for review |
+| **Documents & carousels** | Upload **PDF, PowerPoint (PPTX) or Word (DOCX)** and post it as a swipeable document on LinkedIn (profiles and Pages), or as a file on Telegram and Discord. Different media per channel in one post (e.g. the PDF for LinkedIn, slide images for Instagram) |
+| **Social networks** | Facebook Pages, Instagram (feed, carousel, Reels), LinkedIn profiles and company Pages, X/Twitter, Telegram, Discord, Mastodon, Bluesky, plus a Sandbox test channel |
+| **Teams & agencies** | Unlimited workspaces (one per client or brand), roles (Admin, Editor, Contributor, Approver, Viewer), approval workflow with "request changes" notes, activity log |
 | **Publishing engine** | Cron-driven job queue with atomic claims, automatic retries with back-off (1 / 5 / 15 min), partial-publish tracking, token refresh, channels flagged for reconnect on auth errors |
-| **Light / dark / auto theme** | Saved per user; the whole UI uses semantic colour tokens |
-| **Mobile responsive** | Phone-first List view, slide-out navigation, stacked composer with Write/Preview tabs, no horizontal scrolling |
-| **Web installer** | `/install`: server check, database setup, admin account; locks itself afterwards |
-| **Auto-updater** | One-click or automatic updates from your update server, SHA-256 + Ed25519 signature verification, full backup first, automatic rollback |
-| **Storage clean-up** | Per workspace, off by default: delete images/videos of published posts after 30–365 days (the post text and links stay), delete old post history, delete unused uploads. Drafts, scheduled posts and files they use are never touched. Runs daily. |
-| **Privacy** | Erase a person's account (System → Users → Delete), activity-log IPs kept 90 days, deleted workspaces purged after 30 days |
+| **Light, dark & auto theme** | Saved per user |
+| **Mobile responsive** | Phone-first list view, slide-out navigation, Write/Preview tabs in the composer, no sideways scrolling |
+| **Web installer** | `/install` checks the server, creates the database tables and your admin account, then locks itself |
+| **Auto-updater** | One-click or automatic updates, SHA-256 and Ed25519 signature checks, full backup first, automatic rollback |
+| **Storage clean-up** | Optional, per workspace: delete images/videos of published posts after 30–365 days (the post text and links stay), old post history and unused uploads. Drafts and scheduled posts are never touched |
+| **Privacy** | Erase a person's account, activity-log IPs kept 90 days, deleted workspaces purged after 30 days |
 | **Backups** | Code + `.env` + full SQL dump, downloadable from System → Backups |
-| **Security** | Audited in 1.0.1 (see SECURITY-AUDIT.md): CSP with nonces, CSRF on every write, Argon2id passwords, session timeouts, rate limits, SSRF guard with DNS pinning, encrypted tokens, upload MIME sniffing and pixel limits, no-exec media folder, signed updates |
+| **Security** | Audited (see [SECURITY-AUDIT.md](SECURITY-AUDIT.md)): CSP with nonces, CSRF on every write, Argon2id passwords, session timeouts, rate limits, SSRF guard, encrypted tokens, upload content checks, signed updates |
 
----
+## Screenshots
+
+> Real screenshots of NextaPost with demo data. Each one follows your GitHub theme: switch GitHub to dark mode to see the dark theme.
+
+### Content calendar: week view
+Plan the whole week across every channel. Colour-coded status shows what's published, scheduled, in review or failed, and you can drag a post to reschedule it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/calendar-week-dark.png">
+  <img src="docs/screenshots/calendar-week-light.png" alt="NextaPost social media content calendar week view with scheduled, published and in-review posts for LinkedIn, Instagram, Facebook, X and Telegram" width="100%">
+</picture>
+
+### Month view
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/calendar-month-dark.png">
+  <img src="docs/screenshots/calendar-month-light.png" alt="Social media calendar month view showing a month of planned posts per day" width="100%">
+</picture>
+
+### Post composer with live preview
+Write once, tailor per channel, and see exactly how the post will look before it goes out.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/composer-instagram-dark.png">
+  <img src="docs/screenshots/composer-instagram-light.png" alt="Post composer scheduling one post to Instagram, Facebook and X with character counters and an Instagram preview" width="100%">
+</picture>
+
+### LinkedIn PDF carousel (document post)
+Attach a PDF or PPTX and LinkedIn shows it as a swipeable slide carousel. Works on personal profiles and company Pages.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/composer-document-dark.png">
+  <img src="docs/screenshots/composer-document-light.png" alt="Scheduling a LinkedIn PDF carousel document post to a LinkedIn company Page with an 8-page preview" width="100%">
+</picture>
+
+### Works on your phone
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/mobile-dark.png">
+  <img src="docs/screenshots/mobile-light.png" alt="NextaPost on mobile: calendar list view, post editor and post preview" width="100%">
+</picture>
+
+<details>
+<summary><b>More screenshots: posts, media library, channels, team, system, installer</b></summary>
+
+#### All posts with status filters
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/posts-dark.png">
+  <img src="docs/screenshots/posts-light.png" alt="List of all social media posts filtered by scheduled, in review, drafts, published and failed" width="100%">
+</picture>
+
+#### Media library with images and documents
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/media-dark.png">
+  <img src="docs/screenshots/media-light.png" alt="Media library with post images and a PDF document" width="100%">
+</picture>
+
+#### Connected channels
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/channels-dark.png">
+  <img src="docs/screenshots/channels-light.png" alt="Connected social media channels: Facebook Page, Instagram, LinkedIn profile, LinkedIn Page, Telegram and X" width="100%">
+</picture>
+
+#### Team roles and approval rules
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-dark.png">
+  <img src="docs/screenshots/settings-light.png" alt="Workspace settings with team members, roles and who can publish without approval" width="100%">
+</picture>
+
+#### System settings, updates and backups
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/system-dark.png">
+  <img src="docs/screenshots/system-light.png" alt="System settings with health check, integrations, updates and backups" width="100%">
+</picture>
+
+#### Web installer
+<img src="docs/screenshots/installer.png" alt="NextaPost web installer with server requirements check and MySQL database setup" width="100%">
+
+</details>
+
+## Supported social networks
+
+| Network | Images | Video | Documents (PDF/PPTX/DOCX) | For a "slides" post |
+|---|---|---|---|---|
+| **LinkedIn** profile & company Page | up to 20 | 1 | **Yes**: 1 file, up to 100 MB / 300 pages, shown as a swipeable carousel | Upload the PDF or PPTX |
+| **Instagram** | carousel up to 10 | Reels | No (Meta's API has no document posts) | Export slides as images (1080×1350) → carousel |
+| **Facebook** Page | up to 10 | 1 | No (Meta's API has no document posts) | Export slides as images → multi-photo post |
+| **X (Twitter)** | up to 4 | 1 | No | Up to 4 slide images |
+| **Telegram** | album up to 10 | 1 | **Yes**: sent as a file, up to 50 MB | PDF as a file, or images as an album |
+| **Discord** | up to 10 | 1 | **Yes**: attached file, up to 10 MB | PDF attachment |
+| **Mastodon / Bluesky** | 4 | 1 | No | Up to 4 slide images |
+
+When a post has a document and also a channel that can't take documents, the composer names that channel and lets you give it its own media with one click. Documents are stored outside the public folder, so only signed-in members of the workspace can download them. Files with scripts, macros, embedded files, passwords or remote templates are refused.
 
 ## Requirements
 
@@ -33,6 +163,8 @@ By **Nexta Web Solution Pvt. Ltd.** · Version 1.0.1
 - MySQL **5.7+** or MariaDB **10.3+**
 - HTTPS (AutoSSL). Facebook, Instagram, LinkedIn and X require it.
 - A cron job that runs every minute
+
+Need hosting? **[TPHOST](https://thepowerhost.in/?utm_source=github&utm_medium=readme&utm_campaign=nextapost)** cPanel plans include everything above (NVMe SSD, LiteSpeed, free SSL and cron jobs).
 
 ## Install on cPanel (about 5 minutes)
 
@@ -42,12 +174,12 @@ Choose one layout:
 |---|---|---|
 | How | Extract to `~/nextapost/`, point the domain or subdomain document root to `~/nextapost/public` | Extract the *contents* of `nextapost/` straight into `public_html` (or a subdomain folder) |
 | URLs | `https://social.yourdomain.com/login` | Same clean URLs; the root `.htaccess` sends requests to `public/` internally |
-| Security | `.env`, backups, logs and code sit **outside** the web root, so they can't be reached even if a server rule fails | Protected by `.htaccess` deny rules only. Safe on Apache/LiteSpeed (cPanel); **don't use on Nginx** |
+| Security | `.env`, backups, logs and code sit **outside** the web root | Protected by `.htaccess` deny rules only. Safe on Apache/LiteSpeed (cPanel); **don't use on Nginx** |
 
 1. **Create a subdomain**, e.g. `social.yourdomain.com` (layout A: set its *Document Root* to `nextapost/public`).
-2. **Upload** the zip with File Manager and **Extract** it (layout A into your home folder; layout B into the site folder).
+2. **Upload** the zip with File Manager and **Extract** it.
 3. **Create a database:** cPanel → *MySQL Databases* → create a database and a user, then add the user to the database with **ALL PRIVILEGES**.
-4. **Select PHP 8.1+:** cPanel → *Select PHP Version* (or *MultiPHP Manager*). Enable the extensions listed above.
+4. **Select PHP 8.1+:** cPanel → *Select PHP Version* (or *MultiPHP Manager*) and enable the extensions listed above.
 5. Open `https://social.yourdomain.com/` and follow the **installer**.
 6. **Add the cron job:** cPanel → *Cron Jobs* → *Once Per Minute* → command:
    ```
@@ -56,9 +188,7 @@ Choose one layout:
    (System → Health shows the exact command with your path.)
 7. Sign in → **Channels** → connect a channel (try *Sandbox* first) → **Create post**.
 
-Security notes: keep the document root on `/public` (required on Nginx, where `.htaccess` files are ignored), keep `APP_DEBUG="false"`, and use HTTPS. The installer only accepts a **local** database. To use a remote database server, create an empty file `storage/allow-remote-db` first.
-
-Optional: System → **Email** (SMTP for password resets and invites), System → **General** (white-label product name, public sign-ups).
+Keep `APP_DEBUG="false"` and use HTTPS. The installer only accepts a **local** database; to use a remote database server, create an empty file `storage/allow-remote-db` first. Optional: System → **Email** (SMTP for password resets and invites) and System → **General** (white-label product name, public sign-ups).
 
 ## Connecting the big networks
 
@@ -66,65 +196,51 @@ Create a developer app on each network and paste its keys in **System → Integr
 
 | Network | Developer app | Notes |
 |---|---|---|
-| Facebook Pages + Instagram | developers.facebook.com → Business app → *Facebook Login for Business* + Instagram Graph API | Needs **Meta App Review** for `pages_manage_posts`, `instagram_content_publish` before clients can connect. Instagram must be a Business/Creator account linked to a Page. Media must be reachable over HTTPS. |
-| LinkedIn (profile) | linkedin.com/developers → products *Share on LinkedIn* + *Sign In with LinkedIn (OpenID Connect)* | Self-serve. Personal profiles. Tokens last 60 days. |
-| LinkedIn Page (company) | A **second** app linked to your company Page → request *Community Management API* (keep it the only product on that app) | LinkedIn review: Development tier, then Standard tier with a screencast. The person connecting must be a Page super admin or content admin. |
-| X (Twitter) | developer.x.com → OAuth 2.0, Web App, read + write | X bills API usage to your developer account (pay-per-use). |
-| Telegram / Discord / Mastodon / Bluesky | No app review: connect with a bot token, webhook, access token or app password | |
-
-### What each network accepts
-
-| Network | Images | Video | Documents (PDF/PPTX/DOCX) | For a "slides" post |
-|---|---|---|---|---|
-| LinkedIn profile / Page | up to 20 | 1 | **Yes** — 1 file, up to 100 MB / 300 pages, shown as a swipeable carousel | Upload the PDF or PPTX |
-| Instagram | carousel up to 10 | Reels | No (Meta API has no document posts) | Export slides as images (1080×1350) → carousel |
-| Facebook Page | up to 10 | 1 | No (Pages API has no document posts) | Export slides as images → multi-photo post |
-| X | up to 4 | 1 | No | Up to 4 slide images |
-| Telegram | album up to 10 | 1 | **Yes** — sent as a file, up to 50 MB | PDF as a file, or images as an album |
-| Discord | up to 10 | 1 | **Yes** — attached file, up to 10 MB | PDF attachment |
-| Mastodon / Bluesky | 4 | 1 | No | Up to 4 slide images |
-
-When a post has a document and also a channel that can't take documents, the composer says which channel and lets you give that channel its own media with one click. Documents are stored in `storage/documents/` (not in the public folder) and only signed-in members of the workspace can download them. Old `.doc`/`.ppt` files, macro-enabled files and password-protected PDFs are refused — save as PDF/PPTX/DOCX first.
+| Facebook Pages + Instagram | developers.facebook.com → Business app → *Facebook Login for Business* + Instagram Graph API | Needs **Meta App Review** for `pages_manage_posts` and `instagram_content_publish`. Instagram must be a Business/Creator account linked to a Page. Media must be reachable over HTTPS. |
+| LinkedIn (profile) | linkedin.com/developers → *Share on LinkedIn* + *Sign In with LinkedIn (OpenID Connect)* | Self-serve. Tokens last 60 days. |
+| LinkedIn Page (company) | A **second** app linked to your company Page → request *Community Management API* | LinkedIn review required. The person connecting must be a Page super admin or content admin. |
+| X (Twitter) | developer.x.com → OAuth 2.0, Web App, read + write | X bills API usage to your developer account. |
+| Telegram / Discord / Mastodon / Bluesky | No app review: bot token, webhook, access token or app password | |
 
 ## Updates
 
-**System → Updates** checks `https://updates.nextawebsolution.com` (configurable). An update:
+**System → Updates** checks your update server. An update:
 
 1. downloads the package over HTTPS and verifies its **SHA-256** (and **Ed25519 signature** when a public key is set)
 2. writes a full **backup** (code + `.env` + database) to `storage/backups`
-3. puts the site in maintenance mode, replaces files, runs migrations
+3. puts the site in maintenance mode, replaces files and updates the database
 4. **rolls back automatically** if anything fails
 
-It never touches `.env`, `.htaccess` files (cPanel writes PHP-handler lines there), `storage/` or `public/media/`. You can also **upload a .zip** manually or run `php bin/console.php update package.zip`. Automatic installs (via cron) are opt-in.
+It never touches `.env`, `.htaccess` files, `storage/` or `public/media/`. You can also upload a .zip in System → Updates, or run `php bin/console.php update package.zip`.
 
-Updating by copying the files yourself (File Manager, FTP, git) also works: keep your `.env`, `.htaccess` files and `storage/` folder, overwrite the rest, and the database is brought up to date on the next page load. Take a backup first (System → Backups).
+Updating by copying the files yourself (File Manager, FTP, git) also works: keep `.env`, the `.htaccess` files and `storage/`, overwrite the rest, and the database is brought up to date on the next page load. Take a backup first.
 
-### Update server contract
+<details>
+<summary><b>Update server contract and publishing a release</b></summary>
 
 ```
-GET /api/v1/check?product=nextapost&version=1.0.0&channel=stable&php=8.3.6&site=<hash>&license=<key>
+GET /api/v1/check?product=nextapost&version=1.1.0&channel=stable&php=8.3.6&site=<hash>&license=<key>
 200 {
   "update_available": true,
-  "version": "1.0.1",
-  "released_at": "2026-12-01",
+  "version": "1.1.1",
+  "released_at": "2026-11-18",
   "notes": "What's new…",
-  "download_url": "https://updates.nextawebsolution.com/dl/nextapost-1.0.1.zip",
+  "download_url": "https://updates.example.com/dl/nextapost-1.1.1.zip",
   "sha256": "<hex sha256 of the zip>",
   "signature": "<base64 Ed25519 signature of the sha256 hex string>",
   "min_php": "8.1"
 }
 ```
 
-Publishing a release:
-
 ```bash
 php tools/keygen.php storage/keys            # once; keep update-signing.key secret
-echo 1.0.1 > VERSION
+echo 1.1.1 > VERSION
 php tools/build-release.php --key=storage/keys/update-signing.key --notes="Bug fixes"
-# → dist/nextapost-1.0.1.zip + dist/nextapost-1.0.1.json (serve both from the update server)
+# → dist/nextapost-1.1.1.zip + dist/nextapost-1.1.1.json (serve both from the update server)
 ```
 
-Schema changes after 1.0 go into `database/migrations/YYYY_MM_DD_NNNNNN_name.sql` (MySQL syntax). They're applied once and tracked in the `migrations` table.
+Schema changes go into `database/migrations/YYYY_MM_DD_NNNNNN_name.sql` (MySQL syntax). They're applied once and tracked in the `migrations` table.
+</details>
 
 ## Command line
 
@@ -135,7 +251,7 @@ php bin/console.php migrate
 php bin/console.php create-admin you@example.com 'password' 'Your Name'
 php bin/console.php reset-password you@example.com 'new-password'
 php bin/console.php backup
-php bin/console.php update dist/nextapost-1.0.1.zip
+php bin/console.php update dist/nextapost-1.1.1.zip
 ```
 
 ## Development
@@ -152,11 +268,9 @@ python3 tests/e2e_docs.py http://127.0.0.1:8090 deck.pdf   # documents + per-cha
 php tests/security_setup.php > /tmp/sec.json && python3 tests/security_http.py http://127.0.0.1:8090 /tmp/sec.json   # 53 attack simulations
 ```
 
-Structure: `src/Core` (router, DB, sessions, crypto, mailer), `src/Services` (posts, publishing, queue, worker, media, updater, backup, installer), `src/Providers` (one class per network), `src/Controllers`, `views/` (PHP templates), `public/assets` (compiled CSS, Alpine.js components), `database/schema.sql`.
+**Project structure:** `src/Core` (router, DB, sessions, crypto, mailer), `src/Services` (posts, publishing, queue, worker, media, updater, backup, installer), `src/Providers` (one class per network), `src/Controllers`, `views/` (PHP templates), `public/assets` (compiled CSS, Alpine.js components), `database/` (schema and migrations).
 
-### Adding a network
-
-Create `src/Providers/YourNetworkProvider.php` extending `AbstractProvider` (implement `meta()`, `limits()`, `connect()` or the OAuth pair, and `publish()`), then register it in `ProviderFactory::MAP`.
+**Adding a network:** create `src/Providers/YourNetworkProvider.php` extending `AbstractProvider` (implement `meta()`, `limits()`, `connect()` or the OAuth pair, and `publish()`), then register it in `ProviderFactory::MAP`.
 
 ## Troubleshooting
 
@@ -164,10 +278,55 @@ Create `src/Providers/YourNetworkProvider.php` extending `AbstractProvider` (imp
 |---|---|
 | Yellow banner "scheduler cron job isn't running" | Add the cron job (step 6). System → Health → *Run scheduler now* to test. |
 | Upload fails for big videos | Raise `upload_max_filesize` and `post_max_size` in cPanel → *MultiPHP INI Editor*. |
-| Instagram "media could not be fetched" | Site must be HTTPS and publicly reachable, not behind a login or IP block. |
+| Instagram "media could not be fetched" | The site must be HTTPS and publicly reachable, not behind a login or IP block. |
 | Channel shows "Reconnect" | The token expired or was revoked: Channels → Reconnect. |
-| 500 error | Check `storage/logs/app-YYYY-MM-DD.log`. Temporarily set `APP_DEBUG="true"` in `.env`. |
+| 500 error | Check `storage/logs/app-YYYY-MM-DD.log` for the reference shown on the error page. |
+
+## FAQ
+
+**Is NextaPost a free alternative to Buffer or Hootsuite?**
+It's a self-hosted social media scheduler: you install it once on your own hosting and pay no per-user or per-channel subscription. You only need developer apps from the networks themselves (and X bills API usage separately).
+
+**Can I schedule LinkedIn company Page posts?**
+Yes. Connect your LinkedIn company Page through the *LinkedIn Page* channel (needs LinkedIn's Community Management API approval) and schedule text, images, video or PDF carousels.
+
+**Can I post a PDF carousel on LinkedIn?**
+Yes. Upload a PDF, PPTX or DOCX (up to 100 MB / 300 pages) and NextaPost publishes it as a LinkedIn document post, which members swipe through like slides.
+
+**Does it run on shared hosting without Docker or Node.js?**
+Yes. It's plain PHP and MySQL, built for cPanel. The only server task is one cron job every minute.
+
+**Which hosting do you recommend?**
+Any cPanel host with PHP 8.1+, MySQL and cron jobs works. We recommend [TPHOST by The PowerHost](https://thepowerhost.in/?utm_source=github&utm_medium=readme&utm_campaign=nextapost) for fast Indian cPanel hosting from a Noida datacenter.
+
+**Can my clients approve posts before they go live?**
+Yes. Give them the *Approver* role in their workspace and set "Who can publish without approval" to require approval.
+
+**Where is my data stored?**
+In your own MySQL database and hosting account. Access tokens are encrypted, and uploaded documents are kept outside the public folder.
 
 ## Licence
 
-Proprietary © Nexta Web Solution Pvt. Ltd. Bundled third-party components: Alpine.js (MIT, built from the official source), Tailwind CSS (MIT, build-time only). Network names and logos belong to their owners.
+Proprietary © Nexta Web Solution Pvt. Ltd. Bundled third-party components: Alpine.js (MIT, built from the official source) and Tailwind CSS (MIT, build-time only). Network names and logos belong to their owners.
+
+---
+
+<div align="center">
+
+<p>
+  <a href="https://nextawebsolution.com"><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/nexta-icon-dark.png">
+    <img src="docs/brand/nexta-icon.png" alt="Nexta Web Solution" width="56">
+  </picture></a>
+</p>
+
+**Built by [Nexta Web Solution](https://nextawebsolution.com)** · [LinkedIn](https://www.linkedin.com/company/nextawebsolution/)
+
+<p>
+  <sub>Hosting partner</sub><br>
+  <a href="https://thepowerhost.in/?utm_source=github&utm_medium=readme&utm_campaign=nextapost"><img src="docs/brand/tphost-logo.png" alt="TPHOST by The PowerHost — recommended hosting for NextaPost" height="30"></a>
+</p>
+
+<sub>Keywords: self-hosted social media scheduler, social media management tool, content calendar, PHP social media scheduler, Buffer alternative, Hootsuite alternative, Postiz alternative, LinkedIn scheduler, LinkedIn PDF carousel, Instagram scheduler, cPanel social media app, India cPanel hosting.</sub>
+
+</div>
