@@ -1,0 +1,16 @@
+# Used only when the whole package is uploaded into public_html (document root = this folder).
+# Recommended setup: point your domain's document root to the /public folder instead.
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Never serve application internals
+    RewriteRule ^(\.env|\.git|storage|src|views|bin|database|tests|tools|resources|dist|routes\.php|VERSION|README\.md|CHANGELOG\.md|SECURITY-AUDIT\.md) - [F,L,NC]
+    # Everything else is served from /public
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

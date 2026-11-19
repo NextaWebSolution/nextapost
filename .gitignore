@@ -1,0 +1,17 @@
+# Secrets & runtime data — never commit
+.env
+.env.*
+!.env.example
+storage/*
+!storage/.htaccess
+!storage/*/
+storage/*/*
+!storage/*/.htaccess
+storage/keys/
+public/media/*
+!public/media/.htaccess
+dist/
+node_modules/
+*.sqlite
+*.log
+.DS_Store
