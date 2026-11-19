@@ -1,0 +1,27 @@
+# NextaPost — Apache / LiteSpeed rules (cPanel). The updater never overwrites this file,
+# so cPanel's PHP handler lines below stay intact.
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Front controller: everything that isn't a real file goes to index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    <FilesMatch "\.(css|js|svg|woff2?|png|jpe?g|webp|gif|mp4|mov)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
+</IfModule>
+
+# Block hidden files (.env, .git …)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
