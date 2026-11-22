@@ -6,6 +6,13 @@
   window.np = window.np || {};
   np.csrf = () => meta('csrf');
 
+  /** Interface text in the user's language (English text is the key; {name} placeholders). */
+  np.t = (text, vars) => {
+    let out = (window.NP_I18N && window.NP_I18N[text]) || text;
+    for (const k in (vars || {})) out = out.split('{' + k + '}').join(String(vars[k]));
+    return out;
+  };
+
   /** fetch() wrapper: JSON in/out, CSRF header, readable errors (throws the parsed body). */
   np.api = async (url, opts = {}) => {
     const isForm = opts.body instanceof FormData;
@@ -20,7 +27,7 @@
     if (!res.ok) {
       const err = data && typeof data === 'object' ? data : {};
       err.status = res.status;
-      err.message = (err.error && err.error.message) || (res.status === 413 ? 'That file is too large for the server.' : 'Something went wrong (' + res.status + '). Please try again.');
+      err.message = (err.error && err.error.message) || (res.status === 413 ? np.t('That file is too large for the server.') : np.t('Something went wrong ({status}). Please try again.', { status: res.status }));
       throw err;
     }
     return data;
@@ -88,6 +95,25 @@
     /** Inline confirmation for destructive forms: <form x-data="confirmForm('Delete this?')" @submit="check"> */
     Alpine.data('confirmForm', (message) => ({
       check(e) { if (!window.confirm(message)) e.preventDefault(); },
+    }));
+
+    /** Workspace settings → AI writing assistant (provider-dependent fields + connection test). */
+    Alpine.data('aiSettings', (o) => ({
+      providers: o.providers,
+      cfg: o.cfg,
+      provider: o.cfg.provider || '',
+      testing: false,
+      testMsg: '',
+      testOk: false,
+      async test() {
+        this.testing = true; this.testMsg = '';
+        try {
+          const d = await np.api(o.testUrl, { method: 'POST', body: {} });
+          this.testOk = true; this.testMsg = d.message;
+        } catch (e) {
+          this.testOk = false; this.testMsg = e.message;
+        } finally { this.testing = false; }
+      },
     }));
 
     Alpine.data('copyText', (text) => ({

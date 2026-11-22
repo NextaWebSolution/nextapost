@@ -45,9 +45,15 @@ final class App
 
     public function run(): void
     {
-        Session::start();
         $req = Request::capture();
         $this->request = $req;
+        if (self::isStatelessPath($req->path)) {
+            $this->runStateless($req);
+            return;
+        }
+        Session::start();
+        $u = Auth::user();
+        Lang::set($u['locale'] ?? ($_SESSION['locale'] ?? Lang::fromHeader($req->header('accept-language'))));
         // Enforce HTTPS when the site is configured for it.
         if (str_starts_with((string) Env::get('APP_URL', ''), 'https://') && !is_https() && PHP_SAPI !== 'cli') {
             $u = parse_url((string) Env::get('APP_URL'));
@@ -74,6 +80,57 @@ final class App
                 ? $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')'
                 : 'Something went wrong on our side. Please try again. If it keeps happening, give your administrator this reference: ' . request_id();
             $res = $this->error($req, 500, $msg);
+        }
+        $res->send();
+    }
+
+    /** Token-authenticated endpoints: REST API, MCP, OAuth token/registration and discovery documents. */
+    public static function isStatelessPath(string $path): bool
+    {
+        return str_starts_with($path, '/api/v1/') || $path === '/api/v1' || $path === '/mcp' || str_starts_with($path, '/mcp/')
+            || $path === '/oauth/token' || $path === '/oauth/register' || $path === '/oauth/revoke'
+            || str_starts_with($path, '/.well-known/oauth-');
+    }
+
+    private function runStateless(Request $req): void
+    {
+        Lang::set('en');
+        $cors = [
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID',
+            'Access-Control-Expose-Headers' => 'Mcp-Session-Id, WWW-Authenticate, X-RateLimit-Remaining',
+            'Access-Control-Max-Age' => '600',
+        ];
+        if ($req->method === 'OPTIONS') {
+            $res = new Response('', 204, $cors);
+            $res->send();
+            return;
+        }
+        if (str_starts_with((string) Env::get('APP_URL', ''), 'https://') && !is_https() && PHP_SAPI !== 'cli') {
+            Response::json(['error' => ['code' => 'https_required', 'message' => __('Use HTTPS for this endpoint.')]], 403)->send();
+            return;
+        }
+        $router = new Router(false);
+        $r = $router;
+        require APP_ROOT . '/routes_api.php';
+        try {
+            $res = $router->dispatch($req, $this);
+        } catch (HttpException $e) {
+            $err = ['code' => $e->errorCode ?? (['404' => 'not_found', '405' => 'method_not_allowed', '429' => 'rate_limited'][(string) $e->status] ?? 'http_' . $e->status), 'message' => $e->getMessage()];
+            if ($e instanceof ApiError && $e->details) {
+                $err['details'] = $e->details;
+            }
+            $res = Response::json(['error' => $err + ['request_id' => request_id()]], $e->status);
+            foreach ($e->headers as $k => $v) {
+                $res->headers[$k] = $v;
+            }
+        } catch (\Throwable $e) {
+            Logger::error($e, ['request_id' => request_id(), 'path' => $req->path]);
+            $res = Response::json(['error' => ['code' => 'server_error', 'message' => __('Something went wrong (reference {ref}).', ['ref' => request_id()])]], 500);
+        }
+        foreach ($cors as $k => $v) {
+            $res->headers[$k] ??= $v;
         }
         $res->send();
     }

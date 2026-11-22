@@ -25,9 +25,10 @@ if (!is_dir($dist)) {
 $zipFile = "$dist/nextapost-$version.zip";
 @unlink($zipFile);
 
-$exclude = ['.git/', 'dist/', 'node_modules/', '.env', 'storage/installed.lock', 'storage/maintenance.flag', 'storage/cron.lock'];
+$exclude = ['.git/', 'dist/', 'node_modules/', '.env', 'storage/installed.lock', 'storage/maintenance.flag', 'storage/cron.lock', 'storage/schema.state', 'storage/migrate.lock'];
 if (!isset($opts['with-tests'])) {
     $exclude[] = 'tests/';
+    $exclude[] = 'docs/'; // README screenshots: only needed on GitHub
 }
 $zip = new ZipArchive();
 if ($zip->open($zipFile, ZipArchive::CREATE) !== true) {

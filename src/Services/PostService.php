@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Core\Auth;
 use App\Core\DB;
 use App\Core\Gate;
 use App\Providers\ProviderFactory;
@@ -90,14 +91,14 @@ final class PostService
             $errors[$key][] = $msg;
         };
         $action = in_array($in['action'] ?? '', ['draft', 'review', 'schedule', 'now'], true) ? $in['action'] : 'draft';
-        $body = str_replace("\r\n", "\n", trim((string) ($in['body'] ?? '')));
+        $body = str_replace("\r\n", "\n", trim(str_val($in['body'] ?? '')));
         if (mb_strlen($body) > 65000) {
-            $add('body', 'The text is too long.');
+            $add('body', __('The text is too long.'));
         }
         $chIds = array_values(array_unique(array_filter((array) ($in['channels'] ?? []), 'is_string')));
         $channels = $this->channelsByUuid((int) $ws['id'], $chIds);
         if (count($channels) !== count($chIds)) {
-            $add('general', 'One of the selected channels was removed. Refresh the page and try again.');
+            $add('general', __('One of the selected channels was removed. Refresh the page and try again.'));
         }
         $overrides = [];
         foreach ((array) ($in['overrides'] ?? []) as $k => $v) {
@@ -108,7 +109,7 @@ final class PostService
         $mediaIds = array_values(array_unique(array_filter((array) ($in['media'] ?? []), 'is_string')));
         $media = $this->mediaByUuid((int) $ws['id'], $mediaIds);
         if (count($media) !== count($mediaIds)) {
-            $add('general', 'One of the attached files was deleted. Remove it and try again.');
+            $add('general', __('One of the attached files was deleted. Remove it and try again.'));
         }
         // Different media for a channel (e.g. a PDF for LinkedIn, image slides for Instagram).
         $mediaOverrides = [];
@@ -129,30 +130,30 @@ final class PostService
                 $add('general', 'This post is ' . strtolower(status_label($existing['status'])) . ' and can’t be edited any more. Duplicate it instead.');
             }
             if (isset($in['version']) && (int) $in['version'] !== (int) $existing['version']) {
-                $add('general', 'Someone else changed this post while you were editing. Reload the page to get the latest version.');
+                $add('general', __('Someone else changed this post while you were editing. Reload the page to get the latest version.'));
             }
         }
 
         $publishAt = null;
-        $raw = trim((string) ($in['publish_at'] ?? ''));
+        $raw = trim(str_val($in['publish_at'] ?? ''));
         if ($action === 'now') {
             $publishAt = now_utc();
         } elseif ($raw !== '') {
             $publishAt = to_utc($raw, (string) $ws['timezone']);
             if ($publishAt === null) {
-                $add('publish_at', 'Pick a valid date and time.');
+                $add('publish_at', __('Pick a valid date and time.'));
             }
         }
         if (in_array($action, ['schedule', 'review'], true) && $publishAt === null && !isset($errors['publish_at'])) {
-            $add('publish_at', 'Pick a date and time to publish.');
+            $add('publish_at', __('Pick a date and time to publish.'));
         }
         if ($action === 'schedule' && $publishAt !== null && $publishAt < now_utc(-60)) {
-            $add('publish_at', 'That time has already passed. Pick a future time or use “Post now”.');
+            $add('publish_at', __('That time has already passed. Pick a future time or use “Post now”.'));
         }
 
         if ($action !== 'draft') {
             if (!$channels) {
-                $add('channels', 'Select at least one channel.');
+                $add('channels', __('Select at least one channel.'));
             }
             foreach ($channels as $uuid => $ch) {
                 $items = array_map([MediaService::class, 'toItem'], $mediaOverrides[$uuid] ?? $media);
@@ -166,6 +167,61 @@ final class PostService
                 }
             }
         }
+        // Per-network options: content type (feed / reel / story / poll ...) and extras (poll, first comment, board...).
+        $targetOptions = [];
+        foreach ((array) ($in['target_options'] ?? []) as $chUuid => $opt) {
+            if (!is_string($chUuid) || !isset($channels[$chUuid]) || !is_array($opt)) {
+                continue;
+            }
+            $provider = ProviderFactory::make($channels[$chUuid]['network']);
+            $types = $provider->meta()['content_types'] ?? [];
+            $type = isset($opt['content_type']) && is_string($opt['content_type']) ? $opt['content_type'] : null;
+            if ($type !== null && !isset($types[$type])) {
+                $add($chUuid, __('{network} doesn’t support the post type “{type}”.', ['network' => $channels[$chUuid]['name'], 'type' => $type]));
+                continue;
+            }
+            unset($opt['content_type']);
+            $json = json_encode($opt, JSON_UNESCAPED_UNICODE);
+            if ($json === false || strlen($json) > 8000) {
+                $add($chUuid, __('The extra options for {network} are too long.', ['network' => $channels[$chUuid]['name']]));
+                continue;
+            }
+            $optMedia = array_map([MediaService::class, 'toItem'], $mediaOverrides[$chUuid] ?? $media);
+            $chMeta = json_decode((string) ($channels[$chUuid]['meta_json'] ?? ''), true) ?: [];
+            foreach ($provider->validateOptions($type, $opt, $overrides[$chUuid] ?? $body, $optMedia, $chMeta, $action !== 'draft') as $msg) {
+                $add($chUuid, $msg);
+            }
+            $targetOptions[$chUuid] = ['content_type' => $type, 'options' => $opt ? $json : null];
+        }
+
+        [$recurrence, $recErr] = RecurrenceService::validate($in['recurrence'] ?? ($existing ? json_decode((string) ($existing['recurrence'] ?? ''), true) : null));
+        if ($recErr) {
+            $add('recurrence', $recErr);
+        }
+
+        // Queue mode: every channel takes its own next free slot from its posting schedule.
+        $scheduleMode = ($in['schedule_mode'] ?? 'custom') === 'queue' ? 'queue' : 'custom';
+        $targetTimes = [];
+        if ($scheduleMode === 'queue' && in_array($action, ['schedule', 'review'], true) && $channels && !isset($errors['channels'])) {
+            unset($errors['publish_at']);
+            $sched = new ScheduleService($this->db);
+            foreach ($channels as $uuid => $ch) {
+                $existingTime = null;
+                if ($existing && $existing['schedule_mode'] === 'queue') {
+                    $existingTime = $this->db->value("SELECT publish_at FROM post_targets WHERE post_id = ? AND channel_id = ? AND publish_at > ?", [$existing['id'], $ch['id'], now_utc(60)]);
+                }
+                $slot = $existingTime ?: $sched->nextSlot($ch, $ws);
+                if ($slot === null) {
+                    $add($uuid, __('{name} has no posting schedule yet. Set its posting times in Channels, or pick a date and time.', ['name' => $ch['name']]));
+                    continue;
+                }
+                $targetTimes[$uuid] = (string) $slot;
+            }
+            if ($targetTimes) {
+                $publishAt = min($targetTimes);
+            }
+        }
+
         if ($errors) {
             return ['errors' => $errors, 'post' => null, 'publish_now' => false];
         }
@@ -180,8 +236,14 @@ final class PostService
         $titleSource = $body !== '' ? $body : (string) (reset($overrides) ?: '');
         $title = str_excerpt($titleSource, 120) ?: 'Untitled post';
 
-        $postId = $this->db->tx(function () use ($ws, $user, $existing, $status, $publishAt, $body, $title, $channels, $overrides, $media, $mediaOverrides, $now, $action): int {
-            $data = ['title' => $title, 'body' => $body, 'status' => $status, 'publish_at' => $publishAt, 'updated_at' => $now];
+        $labelUuids = array_key_exists('labels', $in) ? (array) $in['labels'] : null;
+        $source = in_array($in['source'] ?? 'web', ['web', 'api', 'mcp', 'rss', 'idea', 'repurpose', 'template'], true) ? ($in['source'] ?? 'web') : 'web';
+        if ($recurrence && $existing && ($old = json_decode((string) ($existing['recurrence'] ?? ''), true))) {
+            $recurrence['n'] = (int) ($old['n'] ?? 1);
+        }
+        $postId = $this->db->tx(function () use ($ws, $user, $existing, $status, $publishAt, $body, $title, $channels, $overrides, $media, $mediaOverrides, $now, $action, $targetOptions, $targetTimes, $scheduleMode, $recurrence, $labelUuids, $source): int {
+            $data = ['title' => $title, 'body' => $body, 'status' => $status, 'publish_at' => $publishAt, 'updated_at' => $now,
+                'schedule_mode' => $targetTimes ? 'queue' : 'custom', 'recurrence' => $recurrence ? json_encode($recurrence) : null];
             if ($action !== 'draft') {
                 $data['review_note'] = null;
             }
@@ -193,13 +255,14 @@ final class PostService
                 $this->db->run('DELETE FROM post_media WHERE post_id = ?', [$pid]);
             } else {
                 $pid = $this->db->insert('posts', $data + [
-                    'uuid' => uuid4(), 'workspace_id' => $ws['id'], 'author_id' => $user['id'], 'version' => 1, 'source' => 'web', 'created_at' => $now,
+                    'uuid' => uuid4(), 'workspace_id' => $ws['id'], 'author_id' => $user['id'], 'version' => 1, 'source' => $source, 'created_at' => $now,
                 ]);
             }
             foreach ($channels as $uuid => $ch) {
                 $tid = $this->db->insert('post_targets', [
                     'post_id' => $pid, 'channel_id' => $ch['id'], 'body_override' => $overrides[$uuid] ?? null,
-                    'status' => 'pending', 'publish_at' => $publishAt, 'attempts' => 0, 'media_custom' => isset($mediaOverrides[$uuid]) ? 1 : 0,
+                    'status' => 'pending', 'publish_at' => $targetTimes[$uuid] ?? $publishAt, 'attempts' => 0, 'media_custom' => isset($mediaOverrides[$uuid]) ? 1 : 0,
+                    'content_type' => $targetOptions[$uuid]['content_type'] ?? null, 'options_json' => $targetOptions[$uuid]['options'] ?? null,
                 ]);
                 foreach ($mediaOverrides[$uuid] ?? [] as $i => $m) {
                     $this->db->insert('target_media', ['target_id' => $tid, 'media_id' => $m['id'], 'sort_order' => $i]);
@@ -208,11 +271,26 @@ final class PostService
             foreach ($media as $i => $m) {
                 $this->db->insert('post_media', ['post_id' => $pid, 'media_id' => $m['id'], 'sort_order' => $i]);
             }
+            if ($labelUuids !== null) {
+                (new LibraryService($this->db))->setPostLabels((int) $ws['id'], $pid, $labelUuids);
+            }
             return $pid;
         });
 
+        if (!$existing && is_string($in['idea'] ?? null) && ($idea = (new IdeaService($this->db))->find((int) $ws['id'], $in['idea']))) {
+            (new IdeaService($this->db))->linkPost($idea, $postId);
+        }
         $post = $this->db->one('SELECT * FROM posts WHERE id = ?', [$postId]);
         log_activity((int) $ws['id'], $existing ? 'post.updated' : 'post.created', status_label($status) . ': ' . $title, 'post', $postId);
+        Events::emit($this->db, (int) $ws['id'], $existing ? 'post.updated' : 'post.created', $postId);
+        if ($status === 'scheduled' && (!$existing || $existing['status'] !== 'scheduled')) {
+            Events::emit($this->db, (int) $ws['id'], 'post.scheduled', $postId);
+        } elseif ($status === 'in_review' && (!$existing || $existing['status'] !== 'in_review')) {
+            Events::emit($this->db, (int) $ws['id'], 'post.approval_requested', $postId);
+            $this->notifyReviewers($ws, $post, $user);
+        } elseif ($existing && $existing['status'] === 'scheduled' && $status === 'draft') {
+            Events::emit($this->db, (int) $ws['id'], 'post.unscheduled', $postId);
+        }
         return ['errors' => [], 'post' => $post, 'publish_now' => $publishNow];
     }
 
@@ -220,17 +298,17 @@ final class PostService
     public function move(array $ws, array $post, string $localDateTime, ?int $version = null): ?string
     {
         if (!in_array($post['status'], self::MOVABLE, true)) {
-            return 'Only drafts, posts in review and scheduled posts can be moved.';
+            return __('Only drafts, posts in review and scheduled posts can be moved.');
         }
         if ($version !== null && $version !== (int) $post['version']) {
-            return 'This post changed since the calendar loaded. Refresh and try again.';
+            return __('This post changed since the calendar loaded. Refresh and try again.');
         }
         $utc = to_utc($localDateTime, (string) $ws['timezone']);
         if ($utc === null) {
-            return 'That date isn’t valid.';
+            return __('That date isn’t valid.');
         }
         if ($post['status'] !== 'draft' && $utc < now_utc(-60)) {
-            return 'You can’t move a post into the past.';
+            return __('You can’t move a post into the past.');
         }
         $this->db->tx(function () use ($post, $utc): void {
             $this->db->run('UPDATE posts SET publish_at = ?, version = version + 1, updated_at = ? WHERE id = ?', [$utc, now_utc(), $post['id']]);
@@ -244,40 +322,46 @@ final class PostService
     public function approve(array $ws, array $post): ?string
     {
         if ($post['status'] !== 'in_review') {
-            return 'This post isn’t waiting for review.';
+            return __('This post isn’t waiting for review.');
         }
         if (!$post['publish_at']) {
-            return 'Set a publish time before approving.';
+            return __('Set a publish time before approving.');
         }
-        $publishAt = max((string) $post['publish_at'], now_utc());
+        $publishAt = max(str_val($post['publish_at']), now_utc());
         $this->db->tx(function () use ($post, $publishAt): void {
             $this->db->run("UPDATE posts SET status = 'scheduled', publish_at = ?, review_note = NULL, version = version + 1, updated_at = ? WHERE id = ?", [$publishAt, now_utc(), $post['id']]);
             $this->db->run("UPDATE post_targets SET publish_at = ? WHERE post_id = ? AND status = 'pending'", [$publishAt, $post['id']]);
         });
         log_activity((int) $ws['id'], 'post.approved', 'Approved: ' . $post['title'], 'post', (int) $post['id']);
+        Events::emit($this->db, (int) $ws['id'], 'post.approved', (int) $post['id']);
+        Events::emit($this->db, (int) $ws['id'], 'post.scheduled', (int) $post['id']);
+        $this->notifyAuthor($ws, $post, 'approved', null);
         return null;
     }
 
     public function reject(array $ws, array $post, string $note): ?string
     {
         if ($post['status'] !== 'in_review') {
-            return 'This post isn’t waiting for review.';
+            return __('This post isn’t waiting for review.');
         }
         $this->db->run("UPDATE posts SET status = 'draft', review_note = ?, version = version + 1, updated_at = ? WHERE id = ?", [mb_substr(trim($note) ?: 'Changes requested.', 0, 2000), now_utc(), $post['id']]);
         log_activity((int) $ws['id'], 'post.rejected', 'Changes requested: ' . $post['title'], 'post', (int) $post['id']);
+        Events::emit($this->db, (int) $ws['id'], 'post.rejected', (int) $post['id']);
+        $this->notifyAuthor($ws, $post, 'rejected', trim($note) ?: null);
         return null;
     }
 
     public function delete(array $ws, array $post): ?string
     {
         if ($post['status'] === 'publishing') {
-            return 'This post is being published right now. Try again in a minute.';
+            return __('This post is being published right now. Try again in a minute.');
         }
         $this->db->tx(function () use ($post): void {
             $this->db->run("UPDATE posts SET deleted_at = ?, status = CASE WHEN status IN ('published','partially_published') THEN status ELSE 'cancelled' END WHERE id = ?", [now_utc(), $post['id']]);
             $this->db->run("UPDATE post_targets SET status = 'cancelled' WHERE post_id = ? AND status IN ('pending','queued')", [$post['id']]);
         });
         log_activity((int) $ws['id'], 'post.deleted', 'Deleted: ' . $post['title'], 'post', (int) $post['id']);
+        Events::emit($this->db, (int) $ws['id'], 'post.deleted', (int) $post['id']);
         return null;
     }
 
@@ -285,15 +369,47 @@ final class PostService
     public function retry(array $ws, array $post): ?string
     {
         if (!in_array($post['status'], ['failed', 'partially_published'], true)) {
-            return 'Only failed posts can be retried.';
+            return __('Only failed posts can be retried.');
         }
         $n = $this->db->run("UPDATE post_targets SET status = 'pending', publish_at = ?, last_error = NULL, attempts = 0 WHERE post_id = ? AND status = 'failed'", [now_utc(), $post['id']])->rowCount();
         if ($n === 0) {
-            return 'There’s nothing to retry.';
+            return __('There’s nothing to retry.');
         }
         $this->db->run("UPDATE posts SET status = 'scheduled', version = version + 1, updated_at = ? WHERE id = ?", [now_utc(), $post['id']]);
         log_activity((int) $ws['id'], 'post.retried', 'Retry: ' . $post['title'], 'post', (int) $post['id']);
         return null;
+    }
+
+    private function notifyReviewers(array $ws, array $post, array $author): void
+    {
+        $reviewers = $this->db->all(
+            "SELECT u.* FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.role IN ('admin','approver') AND u.id <> ? AND u.deleted_at IS NULL",
+            [$ws['id'], $author['id']]
+        );
+        $n = new Notifier($this->db);
+        foreach ($reviewers as $r) {
+            $n->email($r, 'review', ['Waiting for your approval: “{title}”', ['title' => mb_substr(str_val($post['title']), 0, 60)]], [
+                'heading' => ['{name} sent a post for approval', ['name' => $author['name']]],
+                'lines' => [['Workspace: {workspace}', ['workspace' => $ws['name']]]],
+                'quote' => mb_substr(str_val($post['body']), 0, 1500),
+                'link' => url('/w/' . $ws['uuid'] . '/posts/' . $post['uuid'] . '/edit'), 'button' => 'Review the post',
+            ]);
+        }
+    }
+
+    private function notifyAuthor(array $ws, array $post, string $decision, ?string $note): void
+    {
+        $author = $this->db->one('SELECT * FROM users WHERE id = ?', [$post['author_id']]);
+        $me = Auth::user();
+        if (!$author || ($me && (int) $me['id'] === (int) $author['id'])) {
+            return;
+        }
+        $approved = $decision === 'approved';
+        (new Notifier($this->db))->email($author, 'decision', $approved ? ['Approved: “{title}”', ['title' => mb_substr(str_val($post['title']), 0, 60)]] : ['Changes requested: “{title}”', ['title' => mb_substr(str_val($post['title']), 0, 60)]], [
+            'heading' => $approved ? 'Your post was approved' : 'Your post needs changes',
+            'lines' => [$approved ? ['It’s scheduled in {workspace}.', ['workspace' => $ws['name']]] : ['A reviewer in {workspace} sent it back to drafts.', ['workspace' => $ws['name']]]],
+            'quote' => $note, 'link' => url('/w/' . $ws['uuid'] . '/posts/' . $post['uuid'] . '/edit'), 'button' => 'Open the post',
+        ]);
     }
 
     public function duplicate(array $ws, array $user, array $post): array
@@ -305,8 +421,9 @@ final class PostService
                 'body' => $post['body'], 'status' => 'draft', 'publish_at' => null, 'version' => 1, 'source' => 'web',
                 'created_at' => $now, 'updated_at' => $now,
             ]);
-            foreach ($this->db->all('SELECT id, channel_id, body_override, media_custom FROM post_targets WHERE post_id = ?', [$post['id']]) as $t) {
-                $tid = $this->db->insert('post_targets', ['post_id' => $id, 'channel_id' => $t['channel_id'], 'body_override' => $t['body_override'], 'status' => 'pending', 'attempts' => 0, 'media_custom' => (int) $t['media_custom']]);
+            foreach ($this->db->all('SELECT id, channel_id, body_override, media_custom, content_type, options_json FROM post_targets WHERE post_id = ?', [$post['id']]) as $t) {
+                $tid = $this->db->insert('post_targets', ['post_id' => $id, 'channel_id' => $t['channel_id'], 'body_override' => $t['body_override'], 'status' => 'pending', 'attempts' => 0,
+                    'media_custom' => (int) $t['media_custom'], 'content_type' => $t['content_type'], 'options_json' => $t['options_json']]);
                 foreach ($this->db->all('SELECT media_id, sort_order FROM target_media WHERE target_id = ?', [$t['id']]) as $tm) {
                     $this->db->insert('target_media', ['target_id' => $tid, 'media_id' => $tm['media_id'], 'sort_order' => $tm['sort_order']]);
                 }
@@ -314,6 +431,7 @@ final class PostService
             foreach ($this->db->all('SELECT media_id, sort_order FROM post_media WHERE post_id = ?', [$post['id']]) as $m) {
                 $this->db->insert('post_media', ['post_id' => $id, 'media_id' => $m['media_id'], 'sort_order' => $m['sort_order']]);
             }
+            $this->db->run('INSERT INTO post_labels (post_id, label_id) SELECT ?, label_id FROM post_labels WHERE post_id = ?', [$id, $post['id']]);
             return (array) $this->db->one('SELECT * FROM posts WHERE id = ?', [$id]);
         });
     }
@@ -382,6 +500,11 @@ final class PostService
                 $thumbs[(int) $m['post_id']] ??= MediaService::toJson($m)['thumb'];
             }
         }
+        $labels = (new LibraryService($this->db))->labelsForPosts($ids);
+        $noteCounts = [];
+        foreach ($this->db->all('SELECT post_id, COUNT(*) AS n FROM post_notes WHERE post_id IN (' . DB::in($ids) . ') GROUP BY post_id', $ids) as $r) {
+            $noteCounts[(int) $r['post_id']] = (int) $r['n'];
+        }
         $out = [];
         foreach ($posts as $p) {
             $local = $p['publish_at'] ? to_local($p['publish_at'], $tz, 'Y-m-d H:i') : '';
@@ -391,6 +514,8 @@ final class PostService
                 'date' => $local ? substr($local, 0, 10) : null, 'time' => $local ? substr($local, 11, 5) : null,
                 'channels' => $channels[(int) $p['id']] ?? [], 'thumb' => $thumbs[(int) $p['id']] ?? null,
                 'movable' => in_array($p['status'], self::MOVABLE, true),
+                'labels' => $labels[(int) $p['id']] ?? [], 'notes' => $noteCounts[(int) $p['id']] ?? 0,
+                'recurring' => !empty($p['recurrence']), 'queued' => ($p['schedule_mode'] ?? '') === 'queue',
             ];
         }
         return $out;

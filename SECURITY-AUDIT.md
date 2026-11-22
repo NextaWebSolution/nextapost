@@ -1,104 +1,139 @@
-# NextaPost Security Audit Report
+# NextaPost Security Audit Report — 2.0
 
-**Scope:** full NextaPost codebase (core PHP 8.3, MySQL/SQLite, Tailwind, Alpine.js): 9 social providers, installer, updater, backups, cron worker.
-**Version audited:** 1.0.0. **Fixed in:** 1.0.1. **Date:** 18 Nov 2026.
-**Method:** manual code review of every controller, service, provider, view and config file; proof-of-concept exploits; regression tests; automated attack simulation against a disposable local install. No real user data or third-party systems were touched.
+**Scope:** the full NextaPost 2.0 codebase (core PHP 8.1+, MySQL/SQLite, Tailwind, Alpine.js), with focus on everything new in 2.0: REST API and API keys, MCP server and OAuth 2.1 sign-in for AI apps, webhooks, AI writing assistant and AI interface translation, ideas board, RSS feeds, repurposing rules, media sources (Unsplash, Giphy, Pexels, Canva, Google Drive/Photos), 17 interface languages, 17 networks.
+**Version audited:** 2.0.0 release candidate. **Fixed in:** 2.0.0. **Date:** 21 Nov 2026.
+**Method:** manual review of every new or changed controller, service, provider and view; proof-of-concept tests against a disposable local install; automated attack simulation, API and form fuzzing, a permission matrix of every write route per role, and a browser crawl. No real user data or third-party systems were touched, and no secret values appear in this report.
 
-> This AI-assisted audit is not a replacement for an independent penetration test, which is recommended before onboarding paying agency clients.
+> This audit doesn't replace an independent penetration test, which is still recommended before onboarding paying agency clients.
+
+The 1.0.1 audit (20 findings, all fixed) is summarised in the changelog; every one of its regression tests still passes on 2.0.
 
 ---
 
 ## 1. Executive summary
 
-The 1.0.0 codebase was already in good shape: parameterised SQL everywhere, CSRF on all writes, output escaping, workspace scoping on every query, encrypted tokens and no hardcoded secrets. The audit found **1 High, 9 Medium and 10 Low** issues. The most serious was a **stored XSS**: a malicious Mastodon server could save a `javascript:` link that ran in NextaPost when someone clicked "View post". It was confirmed with a working proof of concept.
+2.0 adds several new ways into NextaPost (API keys, AI apps over MCP, webhooks, outbound fetches to feeds, media libraries and AI services), so this audit concentrated on **who keeps access, and for how long**, and on **outbound requests**.
 
-All 20 findings are fixed and verified. A few residual risks need configuration or a decision (section 7).
+The audit found **3 High, 5 Medium and 4 Low** issues. The most serious was that **access outlived the person**: an API key or a connected AI app kept working after its owner's account was deactivated, and a contributor could change or delete other people's posts through the API. All 12 findings are fixed and covered by tests that pass.
 
-**Verdict: SAFE WITH CONDITIONS** (section 9).
+Outbound requests were already well protected: every v2 feature that fetches a URL goes through the SSRF guard, and seven live SSRF attempts were refused.
 
----
-
-## 2. Vulnerability report and fixes
-
-| # | Severity | Issue | Where | Impact | Fix (verified) |
-|---|---|---|---|---|---|
-| 1 | **High** | Stored XSS via `javascript:` URLs returned by remote servers (post link, avatar). **PoC confirmed:** stored `external_url = javascript:alert(document.cookie)` | `PublishService::publishTarget`, `ChannelController::saveAccount`, `views/posts/composer.php`, `helpers::channel_avatar` | Script runs as the clicking user, e.g. a super admin, giving full account takeover | New `safe_url()` allows only absolute http(s). Applied when storing and when rendering. Regression test re-runs the PoC and passes |
-| 2 | Medium | No Content-Security-Policy; inline event handlers present | `Response`, layouts, installer, settings view | No second line of defence against XSS | CSP with per-request nonce: `script-src 'self' 'nonce-…' 'unsafe-eval'`, `object-src 'none'`, `frame-ancestors 'none'`, `form-action 'self'`, `base-uri 'self'`. Inline handlers and the `javascript:` link removed; installer has its own strict CSP. Browser test shows 0 console/CSP errors |
-| 3 | Medium | Installer hijack window: before setup, anyone could point the site at a database they control | `public/install/index.php` | Site takeover during the minutes between upload and install | Only `localhost`/`127.0.0.1`/socket allowed unless `storage/allow-remote-db` exists (needs file-system access) |
-| 4 | Medium | SSRF gaps: no DNS-rebinding protection, CGNAT/IPv6-local ranges not blocked, Mastodon/Bluesky publish requests not re-checked, http allowed | `Http::assertPublicUrl`, Mastodon/Bluesky providers | Requests to internal services or cloud metadata from your server | Resolve once, block private/loopback/link-local/CGNAT/metadata/ULA/IPv4-mapped addresses, pin curl to the vetted IP (`CURLOPT_RESOLVE`), no redirects, https required, credentials in URLs rejected. Applied to every request to a user-supplied server |
-| 5 | Medium | Secrets could land in logs: exception traces record function arguments (e.g. passwords, tokens) | `App::boot`, `Logger` | Credential exposure through log files | `zend.exception_ignore_args=1` at boot (verified by test) |
-| 6 | Medium | Update metadata not validated: a compromised update server could inject script into the admin page; auto-install accepted unsigned packages | `Updater::check`, `views/system/index.php` | XSS / code execution from a compromised update server | Version, sha256, URL and min-PHP strictly validated; values JSON-encoded in JS context; auto-install only with a signing key; UI warns when unsigned |
-| 7 | Medium | No abuse limits on writes, uploads or channel connects; no storage quota; image decompression bombs possible | Router, `MediaController`, `MediaService` | Disk fill, memory exhaustion, outbound request abuse | Global write limit (300 per 5 min per user/IP, returns 429), uploads 120/hour, channel connects 20 per 10 min, per-workspace quota (10 GB, configurable), images over 12000 px per side or 50 MP rejected before decoding |
-| 8 | Medium | Sessions never expired while the browser stayed open | `Auth::user` | Stolen or shared-device sessions stay valid indefinitely | 12 h idle and 7-day absolute timeouts (configurable), strict session INI settings |
-| 9 | Medium | HTTPS not enforced | `App::run` | Session cookie and credentials could travel over plain HTTP | 301 to HTTPS when `APP_URL` is https (port preserved); HSTS with includeSubDomains |
-| 10 | Medium | No way to erase a person's data; deleted workspaces kept forever | System, housekeeping | DPDP Act / GDPR erasure obligations | System → Users → Delete (anonymises, removes memberships and reset links); deleted workspaces purged with their files after 30 days; activity-log IPs dropped after 90 days |
-| 11 | Low | Older reset links stayed valid after a reset or password change; reset limited per IP only | `AuthController`, `AccountController` | A leaked old reset link could be reused | All outstanding links invalidated; 3 resets per email per hour |
-| 12 | Low | Sign-in timing revealed disabled accounts | `Auth::attempt` | Account enumeration | Hash always verified before status checks |
-| 13 | Low | bcrypt instead of Argon2id | `Auth` | Weaker offline cracking resistance | Argon2id when available; existing hashes upgrade on next sign-in |
-| 14 | Low | Invite set-password link shown to the inviting admin even when the email was sent | `WorkspaceController::addMember` | The admin could claim the invitee's account first | Link shown only if email delivery failed |
-| 15 | Low | `X-Powered-By` header, version on `/health`, HTML pages cacheable | `Response`, `HomeController` | Fingerprinting; private pages in shared caches | Header removed, version removed, `Cache-Control: no-store, private` on HTML |
-| 16 | Low | Generic 500 page had no way to correlate with logs | `App::run` | Slow incident response | Request IDs in header, error page and log entry |
-| 17 | Low | Bad or missing `APP_KEY`/`APP_URL` only failed later, mid-feature | `App::run` | Confusing failures; possible weak config | Fail fast with a generic error and a log entry |
-| 18 | Low | Backup files had predictable names | `Backup::create` | Easier guessing if storage is ever exposed (e.g. Nginx misconfiguration) | Random 48-bit suffix; storage stays deny-all |
-| 19 | Low | Internal folders relied only on the root rewrite rule | `bin/ src/ views/ database/ tools/ resources/ tests/` | Direct file access if `mod_rewrite` is off | `Require all denied` in each folder |
-| 20 | Low | LinkedIn upload URL host not checked; JS-string escaping via `addslashes` | `LinkedInProvider`, two views | Defence in depth | Host allow-list (`linkedin.com`, `licdn.com`); `json_attr()` used for all JS strings |
-
-**Checked with no issue found:** SQL injection (all queries parameterised, dynamic SQL built only from constants); IDOR/BOLA (every `/w/{ws}` route verifies membership, and every post, media, channel and member lookup is scoped by workspace); RBAC enforced server-side through `Gate` on every action; CSRF (419 on missing or forged tokens); open redirects (internal paths and same-host Referer only); upload MIME spoofing (finfo allow-list, random names, no SVG, no-exec media folder); zip-slip in the updater and backups; mass assignment (explicit field lists only); CORS (no CORS headers, same-origin only); `localStorage` (only the calendar view choice); clickjacking.
-
-**Payments:** NextaPost 1.0 has no payment gateway, coupons or credits, so section 5 of the brief doesn't apply. Run this audit again when Razorpay billing is added (webhook signatures, idempotency, server-side prices).
+**Verdict: SAFE WITH CONDITIONS** (section 9). The conditions are configuration and live checks that can't be done in the audit environment, chiefly a test install on real MySQL.
 
 ---
 
-## 3. Security test results (actual runs)
+## 2. Vulnerability report
+
+| # | Severity | Issue | Affected file(s) | Impact |
+|---|---|---|---|---|
+| 1 | **High** | API keys kept working after their owner was deactivated | `src/Services/ApiAuth.php` (`member()`) | A former team member could still read, create, schedule and publish posts through the REST API or MCP |
+| 2 | **High** | AI apps connected over MCP (OAuth tokens) kept working after their owner was deactivated | `src/Services/OAuthService.php` (`memberOk`) | Same as #1, through Claude, ChatGPT or any other connected AI app |
+| 3 | **High** | Contributors could edit, move, delete, retry, schedule and publish **other people's** posts (UI and API) | `src/Controllers/PostController.php`, `src/Services/AgentApi.php` | Broken object-level authorisation: the lowest writing role could change or remove an admin's posts |
+| 4 | Medium | Removing a member left their API keys and connected apps for that workspace active; re-adding the person later revived old access | `src/Controllers/WorkspaceController.php` (`removeMember`) | Forgotten credentials come back to life when someone rejoins |
+| 5 | Medium | Erasing an account (System → Users → Delete) left 2.0 data: API keys, connected-app tokens and codes, Canva/Google sign-ins, language and notification settings | `src/Controllers/SystemController.php` (`deleteUser`) | Incomplete erasure under the DPDP Act / GDPR; stored third-party credentials remained |
+| 6 | Medium | Repurposing rules kept publishing on behalf of a deactivated owner | `src/Services/RepurposeService.php` | Automated posts in the name of someone who has left |
+| 7 | Medium | An OAuth app's redirect address host wasn't validated before being placed in the sign-in page's CSP `form-action` | `src/Services/OAuthService.php`, `src/Controllers/OAuthController.php` | A crafted app registration could inject extra directives into the Content-Security-Policy header |
+| 8 | Medium | A contributor's composer showed Duplicate and editable fields for posts they couldn't change, and the API's `editable` flag ignored ownership | `views/posts/composer.php`, `PostController` | Misleading UI that invited actions the server then refused (no data exposure once #3 was fixed) |
+| 9 | Low | After sign-in, the `to` path was used without normalising it | `src/Controllers/AuthController.php` | Defence in depth against open redirects (`//host`, backslashes, control characters) |
+| 10 | Low | Search text wasn't capped and `%`/`_` weren't escaped in `LIKE` queries | `AgentApi`, `IdeaService`, `PostController` | 100,000-character searches and wildcard abuse caused slow queries |
+| 11 | Low | Sending a list where text was expected (`name[]=x`) crashed some forms and API calls with a 500 | 60 places across controllers and services | Error noise and a possible way to probe internals; passwords were also trimmed |
+| 12 | Low | New 2.0 settings (`API_RATE_LIMIT`, `AI_RATE_LIMIT`, `AI_TRANSLATE_RATE_LIMIT`, `MCP_ALLOWED_ORIGINS`, `AI_ALLOW_PRIVATE_BASE_URL`, …) weren't documented | `.env.example` | Admins couldn't tune or tighten them |
+
+**Checked with no issue found:**
+- **SQL injection:** all queries parameterised, including the new API filters and search.
+- **IDOR/BOLA:** every API operation, webhook, label, template, idea, feed and repurposing rule is scoped to the workspace. Tested with another workspace's IDs.
+- **CSRF:** 419 on every web write without a token. The REST API and MCP use bearer tokens only, with no cookies.
+- **SSRF:** RSS feeds, media import from URL, webhooks, the AI base URL, OAuth client metadata documents and WordPress sites all go through the SSRF guard, with DNS pinning and no redirects.
+- **XXE:** RSS and Atom parsing doesn't load external entities.
+- **Stored XSS:** feed items, idea text, labels (strict hex colours), AI output and translations are escaped. `x-html` is used only for avatars, which escape their input.
+- **Token storage:** API keys and OAuth tokens are stored as SHA-256 hashes. Webhook secrets, AI keys and media-source credentials are encrypted with libsodium.
+- **Webhooks:** signed with HMAC-SHA256 and a timestamp.
+- **OAuth 2.1:** PKCE (S256) required, codes are single-use, redirect URIs must match exactly, and tokens are bound to the requested resource.
+- **MCP:** `Origin` checked against `MCP_ALLOWED_ORIGINS` to prevent DNS rebinding.
+- **AI translation:** placeholders and markup are validated before saving, so a model can't inject HTML into the interface.
+- **Clickjacking:** `frame-ancestors 'none'`.
+
+**Payments:** 2.0 still has no payment gateway, coupons or credits, so the payment section of the brief doesn't apply.
+
+---
+
+## 3. Fixes implemented
+
+| # | Fix | Verified by |
+|---|---|---|
+| 1, 2 | Every API key and OAuth token lookup now requires `users.is_active = 1` as well as membership | `qa_suite`: a deactivated person's API key and connected AI app both get 401 |
+| 3 | New `Gate::canChangePost()`: contributors may change only their own posts. Used by `PostController::ownPost()` (update, move, delete, retry) and `AgentApi::ownPost()` (update, delete, schedule, unschedule, submit, publish_now, retry) | `qa_suite` contributor-ownership checks; permission matrix of 88 write routes × 4 roles |
+| 4 | Removing a member revokes their API keys and OAuth tokens for that workspace | `tests/qa_lifecycle.py` (new) |
+| 5 | Account erasure also revokes all API keys, deletes OAuth tokens and codes and Canva/Google connections, and clears language and notification settings. The "only admin" message is translated | `tests/qa_lifecycle.py`: 14/14 checks |
+| 6 | A repurposing rule runs only while its owner is active; otherwise it pauses | `qa_suite`: rule of a deactivated owner pauses |
+| 7 | New `OAuthService::validHost()` accepts DNS names, IPv4 or bracketed IPv6 only. It's used to validate redirect URIs, and the CSP origin is added only when it passes | `qa_suite` OAuth host checks |
+| 8 | The composer's `editable` flag includes ownership; Duplicate is hidden for roles that can't create posts | Browser crawl as each role |
+| 9 | Sign-in redirect goes through `safe_local_path()` | `qa_suite` |
+| 10 | New `like_pattern()`: trims, caps at 100 characters, escapes `%`, `_`, `!` (`ESCAPE '!'`) | `qa_suite`: a 100,000-character search answers normally |
+| 11 | New `str_val()` replaces 60 unsafe casts; passwords read untrimmed via `Request::raw()` | API fuzz (1,550 calls) and form fuzz (540 submissions): 0 crashes |
+| 12 | `.env.example` documents every new setting, with safe defaults | Review |
+
+Workspace deletion was also checked: every 2.0 table cascades from `workspaces` (foreign keys enforced on SQLite and MySQL), so purged workspaces leave nothing behind.
+
+---
+
+## 4. Security test results (actual runs, 21 Nov 2026)
 
 | Suite | Result |
 |---|---|
-| `tests/suite.php`: integration + security regressions (SQLite) | **150 / 150 passed** |
-| `tests/update_suite.php`: updater (signatures, tampering, zip-slip, rollback, malicious metadata, unsigned auto-install) | **24 / 24 passed** |
-| `tests/security_http.py`: live HTTP attack simulation (headers, CSRF, brute force, session fixation, IDOR, privilege escalation, XSS, SQLi, upload exploits, path traversal, SSRF, CSS injection, open redirect) | **44 / 44 passed** |
-| `tests/e2e.py`: Playwright + Chrome end-to-end, desktop and mobile, under the strict CSP | **25 / 25 passed, 0 console errors** |
-| Manual checks | HTTP→HTTPS 301 with port kept; invalid `APP_KEY` returns a generic 500 with a reference and a log entry |
+| `tests/suite.php`: integration, API, MCP, OAuth, webhooks, AI, i18n and QA/security regressions (SQLite) | **679 / 679 passed** |
+| `tests/update_suite.php`: updater (signatures, tampering, zip-slip, rollback) | **24 / 24 passed** |
+| `tests/security_http.py`: live HTTP attack simulation (headers, CSRF, brute force, session fixation, IDOR, privilege escalation, XSS, SQLi, upload exploits, path traversal, SSRF, open redirect) | **53 / 53 passed** |
+| `tests/qa_lifecycle.py`: member removal and account erasure (new) | **14 / 14 passed** |
+| `tests/qa_writes.py`: every POST route as viewer, approver, contributor and a non-member | **352 requests, all decisions correct, 0 crashes** |
+| `tests/qa_fuzz.py`: every API operation with hostile input (wrong types, huge strings, unicode, injection payloads) | **1,550 calls, 0 server errors** |
+| `tests/qa_forms.py`: every web form with hostile input | **540 submissions, 0 server errors** |
+| Live SSRF (loopback, private, link-local/metadata, CGNAT, IPv6-local, feed, media import, OAuth metadata, WordPress, AI, webhook) | **All refused** |
+| Browser end-to-end suites (core, v2, developers, OAuth, AI, networks, repurpose, ideas, media sources, languages, MCP) | **All passed** (see QA report) |
+| Dependency check | No Composer dependencies; Alpine 3.14.9 has no known vulnerabilities |
 | `php -l` on every PHP file | Clean |
 
 ---
 
-## 4. Secrets audit
+## 5. Secrets audit
+
+No secret values are printed here.
 
 | Item | Location | Status |
 |---|---|---|
-| Hardcoded API keys, passwords, tokens, private keys | Searched all of `src/`, `views/`, `public/`, `bin/`, `tools/` | **None found** |
-| DB credentials, `APP_KEY` | `.env` only, written by the installer with mode 0600 | OK |
-| OAuth client secrets, SMTP password | `settings` table, libsodium-encrypted with `APP_KEY` | OK |
-| Channel tokens (Meta, LinkedIn, X, Telegram, Discord, Mastodon, Bluesky) | `channels.credentials_enc`, encrypted, never sent to the browser | OK |
-| Update signing key | Generated by `tools/keygen.php` into `storage/keys/` (git-ignored); only the public key is configured | OK. Key not generated yet (action for you) |
-| `.gitignore` | Created: `.env`, `storage/*`, `public/media/*`, `dist/`, keys, `*.sqlite`, logs | OK |
+| Hardcoded API keys, passwords, tokens or private keys | Searched `src/`, `views/`, `public/`, `bin/`, `tools/`, `lang/`, `docs/` | **None found** |
+| DB credentials, `APP_KEY` | `.env` only (installer writes it with mode 0600) | OK |
+| REST API keys | `api_keys.token_hash` (SHA-256); the full key is shown once | OK |
+| OAuth access and refresh tokens, codes | Stored as SHA-256 hashes | OK |
+| Webhook signing secrets | `webhooks.secret_enc` (encrypted), shown once | OK |
+| AI provider keys | `workspaces.ai_key_enc` (encrypted), never sent to the browser | OK |
+| Canva/Google media-source sign-ins | `media_connections.credentials_enc` (encrypted) | OK |
+| Network tokens, OAuth app secrets, SMTP password | Encrypted, as in 1.0.1 | OK |
 | `.env.example` | Placeholders only | OK |
-| Git history | The project isn't in Git yet, so there's no history to scan | N/A. Nothing to rotate |
-| Test fixtures | Dummy passwords such as `password123`, test-only, excluded from the release zip | OK |
+| Test fixtures | Dummy values (e.g. `password123`), excluded from the release zip | OK |
+| Release zip | Built by `tools/build-release.php`, which excludes `.env`, `storage/*`, tests, keys and `*.sqlite` | OK |
 
 No secret needs rotation.
 
 ---
 
-## 5. Personal data flow map
+## 6. Personal data flow map
 
 | Data | Collected from | Stored | Shared with | Retention / deletion |
 |---|---|---|---|---|
-| Name, email, timezone, theme | User, admin invites | `users` | SMTP provider (emails) | Until erased via System → Users → Delete (anonymised) |
-| Password | User | Argon2id hash only | Nobody | Replaced on change or erasure |
-| Reset tokens | System | SHA-256 hash, 1 h (invites 7 days) | User's inbox | Invalidated on use or password change; purged daily |
-| Session | System | Server files in `storage/sessions` | Nobody | 12 h idle / 7 days max |
-| IP address, actions | Requests | `activity_log` | Nobody | IP removed after 90 days; entries after 1 year |
-| Social account names, avatars, tokens | Network APIs | `channels`, tokens encrypted | The network itself | Deleted with the channel or workspace |
-| Post text and media | Users | `posts`, `public/media` (unguessable URLs) | The networks the post targets | Optional clean-up rules; deleted workspaces purged after 30 days |
-| Version, PHP version, hashed site URL, licence key | System | – | Update server (daily check) | – |
-| Backups (everything, including `.env`) | Admin | `storage/backups`, 0600, deny-all, last 5–10 kept | Nobody | Admin deletes or rotates |
-
----
-
-## 6. Changes in 1.0.1 (files)
-
-`src/helpers.php`, `src/Core/{App,Auth,Http,Response,Router,Session}.php`, `src/Services/{MediaService,Updater,Backup,Worker,RetentionService (new)}.php`, `src/Controllers/{Auth,Account,Channel,Media,Post,Workspace,System,Home}Controller.php`, `src/Providers/{Mastodon,Bluesky,LinkedIn}Provider.php`, `views/{layouts/*,posts/composer,channels/index,settings/workspace,system/index,errors/error}.php`, `public/install/index.php`, `database/migrations/2026_11_18_000001_retention_privacy.sql`, `.gitignore`, deny-all `.htaccess` files, tests.
+| Name, email, timezone, theme, language, notification choices | User, admin invites | `users` | SMTP provider | Erased via System → Users → Delete |
+| Password | User | Argon2id hash | Nobody | Replaced on change or erasure |
+| Sessions, reset links | System | Server files; reset tokens as hashes | User's inbox | 12 h idle / 7 days; links single-use |
+| IP address, actions | Requests | `activity_log` | Nobody | IP dropped after 90 days or on erasure |
+| API keys | User (Developers) | Hash only | The app the user gives it to | Revoked on member removal, deactivation or erasure |
+| Connected AI apps (MCP) | User consent screen | Token hashes, client name | The AI app the user connects | Revoked or deleted on removal or erasure; the user can disconnect any time |
+| Post text and media | Users, AI apps via API/MCP | `posts`, `public/media` | Target networks; **the workspace's AI provider** when someone uses the writing assistant | Clean-up rules; deleted workspaces purged after 30 days |
+| Interface text | App | `storage/lang` | The admin's AI provider, only when they click "Translate missing" (interface text only, no user data) | Until reset |
+| Webhook events (post data) | System | Delivery log | The URL the admin configures (signed) | Delivery log pruned |
+| RSS feed items | Public feeds | `rss_items` | Nobody | With the feed or workspace |
+| Media-library searches and imports | User | Imported files in `public/media` | Unsplash, Giphy, Pexels, Canva or Google (search terms, the user's own sign-in) | Connection deleted on disconnect or erasure |
+| Social account names, avatars, tokens | Network APIs | `channels` (tokens encrypted) | The network | With the channel or workspace |
+| Version, PHP version, hashed site URL | System | – | Update server (daily check) | – |
 
 ---
 
@@ -106,19 +141,15 @@ No secret needs rotation.
 
 | Item | Risk | Why it's open / what to do |
 |---|---|---|
-| Not tested on a live MySQL server | Medium | No MySQL server in the audit sandbox; SQL is written to be portable and all tests ran on SQLite. **Do a test install on your cPanel first.** |
-| Live Facebook/Instagram/LinkedIn/X calls not exercised | Medium | Verified only against mocked API responses (needs your app keys). Test each network with one real post. |
-| CSP keeps `'unsafe-eval'` | Low | Required by Alpine's standard build. Output escaping stays the main defence. Switching to Alpine's CSP build would mean rewriting every template expression; consider for v2. |
-| No two-factor authentication | Medium | Not in v1. Recommended for super-admin accounts in v1.1. |
-| Updates verified by checksum only until you set a signing key | Medium | Run `php tools/keygen.php` and paste the public key into System → Updates on every install. |
-| A super admin can upload an update zip | By design | Equivalent to code execution. Give super admin only to people you'd trust with cPanel access. |
-| Uploaded media is public via unguessable URLs | Low | Required so Meta can fetch images. Don't upload confidential files. |
-| JPEG EXIF metadata (e.g. GPS) not stripped | Low | Most networks strip it on publish; stripping here would re-encode images. |
-| No email verification for self sign-up | Low | Sign-up is off by default (invite-only). Keep it off unless you need it. |
-| Nginx ignores `.htaccess` | Medium (config) | On Nginx the document root **must** be `public/`. This is the default on cPanel (Apache/LiteSpeed). |
-| A failed update's database changes aren't undone automatically | Low | Files roll back; the pre-update backup contains a full SQL dump for manual restore. |
-| `log` mail driver writes reset links to `storage/logs/mail.log` | Low | Testing only. Use SMTP in production. |
-| Dependency CVE scan | Low | No Composer dependencies. Alpine 3.14.9 was built from the official source; Tailwind runs at build time only. `npm audit` couldn't run (sandbox has no network access). |
+| Not run on a live MySQL server | Medium | **BLOCKED** in the audit environment (no MySQL server). The schema passed a static MySQL compatibility check and all tests ran on SQLite. **Do a test install on your cPanel MySQL before release.** |
+| Live network, AI, Canva and Google calls not exercised | Medium | Verified against recorded and fake API responses only (needs your app keys). Publish one real post per network and try each AI provider once. |
+| No two-factor authentication | Medium | Still not built. Recommended for super admins in 2.1. |
+| CSP keeps `'unsafe-eval'` | Low | Needed by Alpine's standard build; output escaping stays the main defence. |
+| AI output is shown for review, not trusted | Low | AI text is escaped and never published without a person or an approved API call. AI apps act with the role of the person who connected them, so give AI apps to roles you trust. |
+| A super admin can upload an update zip | By design | Equivalent to code execution; keep super admin to people you'd trust with cPanel. |
+| Uploaded media is public via unguessable URLs | Low | Required for Meta and others to fetch images. |
+| Nginx ignores `.htaccess` | Medium (config) | On Nginx the document root **must** be `public/` (the cPanel default). |
+| No independent penetration test | Medium | Recommended before paying clients. |
 
 ---
 
@@ -126,26 +157,35 @@ No secret needs rotation.
 
 | Requirement | Status |
 |---|---|
-| Debug off (`APP_DEBUG="false"`, installer default) | ✅ Pass |
+| Debug off (`APP_DEBUG="false"`) | ✅ Pass |
 | `APP_KEY` generated and validated at start-up | ✅ Pass |
+| Security headers (CSP with nonces, HSTS on https, XFO/`frame-ancestors`, nosniff, Referrer-Policy) | ✅ Pass |
+| CSRF on every web write; bearer-only API and MCP | ✅ Pass |
+| Rate limits: login, reset, sign-up, writes, uploads, API, AI, AI translation | ✅ Pass |
+| Access removed when a person is deactivated, removed or erased | ✅ Pass (fixed in this audit) |
+| SSRF guard on every outbound fetch | ✅ Pass |
+| `.env`, `storage`, `lang`, `docs`, internal folders unreachable over HTTP | ✅ Pass |
+| No default credentials, test routes or seed endpoints in the release zip | ✅ Pass |
+| Installer locked after install | ✅ Pass |
 | HTTPS / AutoSSL and `APP_URL` starting `https://` | ⚠️ Your action |
 | Document root = `nextapost/public` (mandatory on Nginx) | ⚠️ Your action |
-| Installer locked after install (`storage/installed.lock`) | ✅ Pass. Optionally delete `public/install` |
-| Local database only; DB user has rights on its own database only | ✅ Pass (enforced) / ⚠️ verify in cPanel |
 | Cron job every minute | ⚠️ Your action |
+| SMTP configured | ⚠️ Your action |
 | Update signing key configured | ⚠️ Your action |
-| SMTP configured (resets, invites) | ⚠️ Your action |
-| Security headers (CSP, HSTS, XFO, nosniff, Referrer-Policy) | ✅ Pass |
-| `.env`, storage, internal folders unreachable over HTTP | ✅ Pass |
-| No default credentials, test routes or seed endpoints | ✅ Pass (tests excluded from the release zip) |
-| Rate limits on login, reset, sign-up, writes, uploads, connects | ✅ Pass |
-| Backups scheduled (System → Backups + cPanel backup of `public/media`) | ⚠️ Your action |
-| Meta App Review / LinkedIn / X app setup | ⚠️ Your action |
-| Live MySQL test install | ⚠️ Pending |
-| Independent penetration test before paying clients | ⚠️ Recommended |
+| `MCP_ALLOWED_ORIGINS` set if you put NextaPost behind a different public hostname | ⚠️ Your action (if needed) |
+| Live MySQL test install | ❌ Not done (blocked here) |
+| One real post per network; one call per AI provider | ❌ Not done (needs your keys) |
+| Independent penetration test | ⚠️ Recommended |
 
 ---
 
 ## 9. Final verdict: **SAFE WITH CONDITIONS**
 
-Every High and Medium code-level finding is fixed and covered by tests that pass: 150 integration, 24 updater, 44 attack simulations and 25 browser checks. NextaPost 1.0.1 is fit for production on cPanel **once** you have enabled HTTPS, set the document root to `public/`, added the cron job, configured an update signing key, and confirmed a test install on your own MySQL server. Add 2FA for super admins and an independent penetration test before onboarding paying clients.
+All 12 findings are fixed. The tests pass: 679 integration, 24 updater, 53 attack simulations and 14 lifecycle checks, plus fuzzing and the permission matrix with no failures. No secrets are exposed and no High or Medium code issue is open.
+
+NextaPost 2.0.0 is fit for production on cPanel **once**:
+1. a test install on your own MySQL server works;
+2. HTTPS, the `public/` document root, the cron job, SMTP and an update signing key are set up;
+3. one real post per network you offer has succeeded.
+
+Add 2FA for super admins and an independent penetration test before onboarding paying clients.

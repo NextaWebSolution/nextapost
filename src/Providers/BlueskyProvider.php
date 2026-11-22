@@ -42,7 +42,7 @@ final class BlueskyProvider extends AbstractProvider
     public function connect(array $input): array
     {
         $this->require($input, 'handle', 'app_password');
-        $c = ['handle' => ltrim(trim((string) $input['handle']), '@'), 'app_password' => trim((string) $input['app_password']), 'service' => trim((string) ($input['service'] ?? ''))];
+        $c = ['handle' => ltrim(trim(str_val($input['handle'])), '@'), 'app_password' => trim(str_val($input['app_password'])), 'service' => trim(str_val($input['service'] ?? ''))];
         if ($c['service'] !== '') {
             Http::assertPublicUrl($c['service']);
         }
@@ -78,6 +78,16 @@ final class BlueskyProvider extends AbstractProvider
             }
         }
         return $facets;
+    }
+
+    public function metrics(array $credentials, string $externalId, array $meta = []): ?array
+    {
+        if (!str_starts_with($externalId, 'at://')) {
+            return null;
+        }
+        $j = $this->ok($this->http('GET', 'https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?uris=' . rawurlencode($externalId)));
+        $p = $j['posts'][0] ?? null;
+        return $p ? ['likes' => (int) ($p['likeCount'] ?? 0), 'comments' => (int) ($p['replyCount'] ?? 0), 'shares' => (int) ($p['repostCount'] ?? 0) + (int) ($p['quoteCount'] ?? 0)] : null;
     }
 
     public function publish(array $credentials, string $text, array $media, array $meta = [], array $context = []): PublishResult

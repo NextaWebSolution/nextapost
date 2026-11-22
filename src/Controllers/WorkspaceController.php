@@ -33,7 +33,8 @@ final class WorkspaceController extends Controller
             'title' => 'Workspace settings', 'members' => $members, 'activity' => $activity,
             'usage' => $usage, 'cleanupPreview' => (new RetentionService($this->db))->run($this->ws, true),
             'quota' => max(1, (int) \App\Core\Env::get('MAX_WORKSPACE_STORAGE_MB', 10240)) * 1024 * 1024,
-            'canSettings' => $this->can('settings'), 'roles' => Gate::ROLES, 'timezones' => \DateTimeZone::listIdentifiers(),
+            'canSettings' => $this->can('settings'), 'roles' => Gate::roles(), 'timezones' => \DateTimeZone::listIdentifiers(),
+            'ai' => \App\Services\AiService::settingsFor($this->ws), 'aiProviders' => \App\Services\AiService::PROVIDERS,
         ]);
     }
 
@@ -46,10 +47,10 @@ final class WorkspaceController extends Controller
         $color = $this->req->str('color');
         $mode = $this->req->str('approval_mode');
         if ($name === '' || mb_strlen($name) > 150) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'Enter a workspace name (up to 150 characters).']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('Enter a workspace name (up to 150 characters).')]);
         }
         if (!valid_timezone($tz)) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'Choose a valid time zone.']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('Choose a valid time zone.')]);
         }
         if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
             $color = (string) $this->ws['color'];
@@ -59,7 +60,7 @@ final class WorkspaceController extends Controller
         }
         $this->db->update('workspaces', ['name' => $name, 'timezone' => $tz, 'color' => $color, 'approval_mode' => $mode, 'updated_at' => now_utc()], 'id = ?', [$this->ws['id']]);
         log_activity((int) $this->ws['id'], 'workspace.updated', 'Workspace settings changed');
-        return $this->back($this->wsUrl('settings'), ['success' => 'Workspace settings saved.']);
+        return $this->back($this->wsUrl('settings'), ['success' => __('Workspace settings saved.')]);
     }
 
     public function saveRetention(string $ws): Response
@@ -74,7 +75,7 @@ final class WorkspaceController extends Controller
         ];
         $this->db->update('workspaces', $data + ['updated_at' => now_utc()], 'id = ?', [$this->ws['id']]);
         log_activity((int) $this->ws['id'], 'storage.settings', sprintf('Clean-up rules: media %dd, posts %dd, unused files %dd (0 = never)', ...array_values($data)));
-        return $this->back($this->wsUrl('settings'), ['success' => 'Clean-up rules saved. They run automatically once a day.']);
+        return $this->back($this->wsUrl('settings'), ['success' => __('Clean-up rules saved. They run automatically once a day.')]);
     }
 
     public function runRetention(string $ws): Response
@@ -90,7 +91,7 @@ final class WorkspaceController extends Controller
         $u = $this->user();
         $name = $this->req->str('name');
         if ($name === '' || mb_strlen($name) > 150) {
-            return $this->back(url('/'), ['error' => 'Enter a name for the new workspace.']);
+            return $this->back(url('/'), ['error' => __('Enter a name for the new workspace.')]);
         }
         $tz = $this->req->str('timezone', (string) $u['timezone']);
         if (!valid_timezone($tz)) {
@@ -101,7 +102,7 @@ final class WorkspaceController extends Controller
             $orgId = $this->db->insert('organizations', ['uuid' => uuid4(), 'name' => $u['name'] . '’s team', 'owner_id' => $u['id'], 'created_at' => now_utc()]);
         }
         $ws = (new AccountService($this->db))->createWorkspace($orgId, (int) $u['id'], $name, $tz);
-        Session::flash('success', 'Workspace “' . $name . '” created. Connect its channels next.');
+        Session::flash('success', __('Workspace “{name}” created. Connect its channels next.', ['name' => $name]));
         return $this->redirect(url('/w/' . $ws['uuid'] . '/channels'));
     }
 
@@ -110,17 +111,17 @@ final class WorkspaceController extends Controller
         $this->workspace($ws);
         $this->authorize('settings');
         if ($this->req->str('confirm_name') !== $this->ws['name']) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'Type the workspace name exactly to confirm deletion.']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('Type the workspace name exactly to confirm deletion.')]);
         }
         $count = (int) $this->db->value('SELECT COUNT(*) FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND w.deleted_at IS NULL', [Auth::id()]);
         if ($count <= 1) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'You can’t delete your only workspace. Create another one first.']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('You can’t delete your only workspace. Create another one first.')]);
         }
         $this->db->run("UPDATE posts SET status = 'cancelled' WHERE workspace_id = ? AND status IN ('scheduled','in_review','draft')", [$this->ws['id']]);
         $this->db->run("UPDATE post_targets SET status = 'cancelled' WHERE status IN ('pending','queued') AND post_id IN (SELECT id FROM posts WHERE workspace_id = ?)", [$this->ws['id']]);
         $this->db->update('workspaces', ['deleted_at' => now_utc()], 'id = ?', [$this->ws['id']]);
         unset($_SESSION['ws']);
-        Session::flash('success', 'Workspace deleted. Its scheduled posts were cancelled.');
+        Session::flash('success', __('Workspace deleted. Its scheduled posts were cancelled.'));
         return $this->redirect(url('/'));
     }
 
@@ -132,7 +133,7 @@ final class WorkspaceController extends Controller
         $name = $this->req->str('name');
         $role = $this->req->str('role', 'editor');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'Enter a valid email address.']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('Enter a valid email address.')]);
         }
         if (!isset(Gate::ROLES[$role])) {
             $role = 'editor';
@@ -177,10 +178,10 @@ final class WorkspaceController extends Controller
         $m = $this->member($userUuid);
         $role = $this->req->str('role');
         if (!isset(Gate::ROLES[$role])) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'Choose a valid role.']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('Choose a valid role.')]);
         }
         if ($m['role'] === 'admin' && $role !== 'admin' && $this->adminCount() <= 1) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'A workspace needs at least one admin.']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('A workspace needs at least one admin.')]);
         }
         $this->db->update('workspace_members', ['role' => $role], 'workspace_id = ? AND user_id = ?', [$this->ws['id'], $m['id']]);
         return $this->back($this->wsUrl('settings'), ['success' => $m['name'] . ' is now ' . $role . '.']);
@@ -192,9 +193,12 @@ final class WorkspaceController extends Controller
         $this->authorize('members');
         $m = $this->member($userUuid);
         if ($m['role'] === 'admin' && $this->adminCount() <= 1) {
-            return $this->back($this->wsUrl('settings'), ['error' => 'A workspace needs at least one admin.']);
+            return $this->back($this->wsUrl('settings'), ['error' => __('A workspace needs at least one admin.')]);
         }
         $this->db->run('DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?', [$this->ws['id'], $m['id']]);
+        // Their API keys and connected apps for this workspace are revoked too, so re-adding them later doesn't revive old access.
+        $this->db->run('UPDATE api_keys SET revoked_at = ? WHERE workspace_id = ? AND user_id = ? AND revoked_at IS NULL', [now_utc(), $this->ws['id'], $m['id']]);
+        $this->db->run('UPDATE oauth_tokens SET revoked_at = ? WHERE workspace_id = ? AND user_id = ? AND revoked_at IS NULL', [now_utc(), $this->ws['id'], $m['id']]);
         log_activity((int) $this->ws['id'], 'member.removed', $m['email']);
         if ((int) $m['id'] === Auth::id()) {
             unset($_SESSION['ws']);
@@ -207,7 +211,7 @@ final class WorkspaceController extends Controller
     {
         $m = $this->db->one('SELECT u.*, m.role FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND u.uuid = ?', [$this->ws['id'], $userUuid]);
         if (!$m) {
-            throw new HttpException(404, 'Member not found.');
+            throw new HttpException(404, __('Member not found.'));
         }
         return $m;
     }

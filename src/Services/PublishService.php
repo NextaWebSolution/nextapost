@@ -105,7 +105,12 @@ final class PublishService
                 }
             }
             $text = $t['body_override'] !== null ? (string) $t['body_override'] : (string) $t['post_body'];
-            $result = $provider->publish($creds, $text, $media, $meta, ['idempotency_key' => 'np-' . $targetId . '-' . $t['attempts']]);
+            $result = $provider->publish($creds, $text, $media, $meta, [
+                'idempotency_key' => 'np-' . $targetId . '-' . $t['attempts'],
+                'content_type' => $t['content_type'] ?? null,
+                'options' => json_decode((string) ($t['options_json'] ?? ''), true) ?: [],
+                'title' => (string) ($t['post_title'] ?? ''),
+            ]);
             $this->db->update('post_targets', [
                 'status' => 'published', 'external_id' => mb_substr($result->externalId, 0, 190), 'external_url' => safe_url($result->url) !== null ? mb_substr((string) $result->url, 0, 700) : null,
                 'published_at' => now_utc(), 'last_error' => null,
@@ -150,7 +155,7 @@ final class PublishService
         }
         $post = $this->db->one('SELECT status, deleted_at, workspace_id, title FROM posts WHERE id = ?', [$postId]);
         if (!$post || in_array($post['status'], ['draft', 'in_review', 'cancelled'], true)) {
-            return (string) ($post['status'] ?? '');
+            return str_val($post['status'] ?? '');
         }
         $active = $counts['pending'] + $counts['queued'] + $counts['publishing'];
         $status = match (true) {
@@ -165,9 +170,31 @@ final class PublishService
             $this->db->update('posts', ['status' => $status, 'updated_at' => now_utc()], 'id = ?', [$postId]);
             if (in_array($status, ['published', 'failed', 'partially_published'], true)) {
                 log_activity((int) $post['workspace_id'], 'post.' . $status, status_label($status) . ': ' . $post['title'], 'post', $postId);
+                Events::emit($this->db, (int) $post['workspace_id'], $status === 'failed' ? 'post.failed' : 'post.published', $postId);
+                if ($status !== 'published') {
+                    $this->notifyFailure($postId);
+                }
             }
         }
         return $status;
+    }
+
+    private function notifyFailure(int $postId): void
+    {
+        $p = $this->db->one('SELECT p.*, w.uuid AS ws_uuid, w.name AS ws_name FROM posts p JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = ?', [$postId]);
+        $author = $p ? $this->db->one('SELECT * FROM users WHERE id = ?', [$p['author_id']]) : null;
+        if (!$author) {
+            return;
+        }
+        $errors = array_column($this->db->all("SELECT c.name, t.last_error FROM post_targets t JOIN channels c ON c.id = t.channel_id WHERE t.post_id = ? AND t.status = 'failed'", [$postId]), 'last_error', 'name');
+        $lines = [['Workspace: {workspace}', ['workspace' => $p['ws_name']]]];
+        foreach ($errors as $name => $err) {
+            $lines[] = ['{channel}: {error}', ['channel' => $name, 'error' => mb_substr((string) $err, 0, 300)]];
+        }
+        (new Notifier($this->db))->email($author, 'failed', ['Couldn’t publish: “{title}”', ['title' => mb_substr((string) $p['title'], 0, 60)]], [
+            'heading' => 'A post didn’t publish everywhere', 'lines' => $lines,
+            'link' => url('/w/' . $p['ws_uuid'] . '/posts/' . $p['uuid'] . '/edit'), 'button' => 'Open the post',
+        ]);
     }
 
     private function providerLog(int $channelId, string $network, string $action, bool $ok, string $message, float $start): void

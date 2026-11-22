@@ -24,7 +24,7 @@ final class SandboxProvider extends AbstractProvider
     public function connect(array $input): array
     {
         $this->require($input, 'label');
-        $label = mb_substr(trim((string) $input['label']), 0, 80);
+        $label = mb_substr(trim(str_val($input['label'])), 0, 80);
         return ['external_id' => 'sandbox-' . bin2hex(random_bytes(6)), 'name' => $label, 'username' => 'sandbox', 'avatar_url' => null, 'credentials' => ['label' => $label], 'meta' => []];
     }
 

@@ -13,7 +13,7 @@ final class Http
     public static $fake = null;
 
     /**
-     * @param array{headers?:string[],json?:mixed,form?:array,multipart?:array,body?:string,timeout?:int,sink?:string} $opts
+     * @param array{headers?:string[],json?:mixed,form?:array,multipart?:array,body?:string,timeout?:int,sink?:string,max_bytes?:int,public_only?:bool,infile?:string,infile_offset?:int,infile_length?:int} $opts
      * @return array{status:int,body:string,json:mixed,headers:array}
      */
     public static function request(string $method, string $url, array $opts = []): array
@@ -67,6 +67,27 @@ final class Http
         } elseif (isset($opts['body'])) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, $opts['body']);
         }
+        $infile = null;
+        if (!empty($opts['infile'])) {
+            // Stream a file (or a byte range of it) as the request body without loading it into memory.
+            $infile = fopen((string) $opts['infile'], 'rb');
+            if ($infile === false) {
+                throw new ProviderException('Could not read the file to upload.');
+            }
+            $offset = (int) ($opts['infile_offset'] ?? 0);
+            $length = (int) ($opts['infile_length'] ?? (filesize((string) $opts['infile']) - $offset));
+            fseek($infile, $offset);
+            curl_setopt($ch, CURLOPT_UPLOAD, true);
+            curl_setopt($ch, CURLOPT_INFILE, $infile);
+            curl_setopt($ch, CURLOPT_INFILESIZE, $length);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $opts['timeout'] ?? 900);
+        }
+        if (!empty($opts['max_bytes'])) {
+            // Abort downloads that grow past the limit (the server may not send Content-Length).
+            $max = (int) $opts['max_bytes'];
+            curl_setopt($ch, CURLOPT_NOPROGRESS, false);
+            curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, static fn ($c, $dlTotal, $dl) => ($dlTotal > $max || $dl > $max) ? 1 : 0);
+        }
         $sink = null;
         if (!empty($opts['sink'])) {
             $sink = fopen($opts['sink'], 'wb');
@@ -79,6 +100,9 @@ final class Http
         $err = curl_error($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
+        if ($infile) {
+            fclose($infile);
+        }
         if ($sink) {
             fclose($sink);
         }

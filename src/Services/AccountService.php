@@ -16,10 +16,10 @@ final class AccountService
     public static function passwordProblem(string $pw): ?string
     {
         if (mb_strlen($pw) < 8) {
-            return 'Use at least 8 characters for the password.';
+            return __('Use at least 8 characters for the password.');
         }
         if (mb_strlen($pw) > 200) {
-            return 'That password is too long.';
+            return __('That password is too long.');
         }
         return null;
     }
@@ -30,10 +30,10 @@ final class AccountService
         $name = trim($name);
         $email = mb_strtolower(trim($email));
         if ($name === '' || mb_strlen($name) > 120) {
-            return 'Enter your name.';
+            return __('Enter your name.');
         }
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 190) {
-            return 'Enter a valid email address.';
+            return __('Enter a valid email address.');
         }
         if ($err = self::passwordProblem($password)) {
             return $err;
@@ -42,7 +42,7 @@ final class AccountService
             $timezone = 'Asia/Kolkata';
         }
         if ($this->db->value('SELECT 1 FROM users WHERE email = ?', [$email])) {
-            return 'An account with that email already exists. Sign in instead.';
+            return __('An account with that email already exists. Sign in instead.');
         }
         return $this->db->tx(function () use ($name, $email, $password, $timezone, $company, $superAdmin): array {
             $now = now_utc();

@@ -37,19 +37,19 @@ final class MediaService
         $err = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
         if ($err !== UPLOAD_ERR_OK) {
             throw new \InvalidArgumentException(match ($err) {
-                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'That file is larger than your server allows (' . ini_get('upload_max_filesize') . '). Raise upload_max_filesize in cPanel → MultiPHP INI Editor.',
-                UPLOAD_ERR_NO_FILE => 'Choose a file to upload.',
-                UPLOAD_ERR_PARTIAL => 'The upload was interrupted. Please try again.',
-                default => 'The server couldn’t save the upload (error ' . $err . ').',
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => __('That file is larger than your server allows ({size}). Raise upload_max_filesize in cPanel → MultiPHP INI Editor.', ['size' => ini_get('upload_max_filesize')]),
+                UPLOAD_ERR_NO_FILE => __('Choose a file to upload.'),
+                UPLOAD_ERR_PARTIAL => __('The upload was interrupted. Please try again.'),
+                default => __('The server couldn’t save the upload (error {code}).', ['code' => $err]),
             });
         }
         $tmp = (string) $file['tmp_name'];
         if (!$trustedLocal && !is_uploaded_file($tmp)) {
-            throw new \InvalidArgumentException('Invalid upload.');
+            throw new \InvalidArgumentException(__('Invalid upload.'));
         }
         $size = (int) filesize($tmp);
         if ($size > self::maxBytes()) {
-            throw new \InvalidArgumentException('Files can be up to ' . human_bytes(self::maxBytes()) . '.');
+            throw new \InvalidArgumentException(__('Files can be up to {size}.', ['size' => human_bytes(self::maxBytes())]));
         }
         $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($tmp);
         $pages = null;
@@ -57,36 +57,36 @@ final class MediaService
             [$ext, $type] = self::TYPES[$mime];
         } elseif (in_array($mime, ['application/pdf', 'application/zip', 'application/octet-stream', 'application/x-zip-compressed', DocumentInspector::PPTX, DocumentInspector::DOCX, 'application/vnd.ms-powerpoint', 'application/msword', 'application/CDFV2', 'application/x-ole-storage'], true)) {
             if ($size > self::DOC_MAX_BYTES) {
-                throw new \InvalidArgumentException('Documents can be up to 100 MB (LinkedIn’s limit).');
+                throw new \InvalidArgumentException(__('Documents can be up to 100 MB (LinkedIn’s limit).'));
             }
             $doc = DocumentInspector::inspect($tmp, (string) ($file['name'] ?? ''));
             [$mime, $ext, $type, $pages] = [$doc['mime'], $doc['ext'], 'document', $doc['pages']];
             if ($pages !== null && $pages > 300) {
-                throw new \InvalidArgumentException('Documents can have up to 300 pages (LinkedIn’s limit). This one has ' . $pages . '.');
+                throw new \InvalidArgumentException(__('Documents can have up to 300 pages (LinkedIn’s limit). This one has {n}.', ['n' => $pages]));
             }
         } else {
-            throw new \InvalidArgumentException('Upload JPG, PNG, GIF, WebP images, MP4/MOV videos, or PDF, PPTX and DOCX documents.');
+            throw new \InvalidArgumentException(__('Upload JPG, PNG, GIF, WebP images, MP4/MOV videos, or PDF, PPTX and DOCX documents.'));
         }
         $width = $height = null;
         if ($type === 'image') {
             $info = @getimagesize($tmp);
             if (!$info) {
-                throw new \InvalidArgumentException('That image appears to be damaged.');
+                throw new \InvalidArgumentException(__('That image appears to be damaged.'));
             }
             [$width, $height] = $info;
             if ($width < 1 || $height < 1 || $width > 12000 || $height > 12000 || $width * $height > 50_000_000) {
-                throw new \InvalidArgumentException('That image is too large in pixels (max 12000×12000, 50 megapixels).');
+                throw new \InvalidArgumentException(__('That image is too large in pixels (max 12000×12000, 50 megapixels).'));
             }
         }
         $quota = max(1, (int) Env::get('MAX_WORKSPACE_STORAGE_MB', 10240)) * 1024 * 1024;
         $used = (int) $this->db->value('SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE workspace_id = ?', [$ws['id']]);
         if ($used + $size > $quota) {
-            throw new \InvalidArgumentException('This workspace has used its storage allowance (' . human_bytes($quota) . '). Delete old files or turn on automatic clean-up in Team & settings.');
+            throw new \InvalidArgumentException(__('This workspace has used its storage allowance ({size}). Delete old files or turn on automatic clean-up in Team & settings.', ['size' => human_bytes($quota)]));
         }
         $rel = ($type === 'document' ? 'documents/' : 'media/') . $ws['uuid'] . '/' . gmdate('Y/m') . '/' . bin2hex(random_bytes(12)) . '.' . $ext;
         $abs = self::absPath(['type' => $type, 'path' => $rel]);
         if (!is_dir(dirname($abs)) && !mkdir(dirname($abs), 0755, true) && !is_dir(dirname($abs))) {
-            throw new \RuntimeException('Could not create the upload folder. Check that public/media and storage are writable.');
+            throw new \RuntimeException(__('Could not create the upload folder. Check that public/media and storage are writable.'));
         }
         // Updates never touch storage/, so add the folder guard here for sites upgraded from 1.0.x.
         $guard = APP_ROOT . '/storage/documents/.htaccess';
@@ -95,7 +95,7 @@ final class MediaService
         }
         $moved = $trustedLocal ? copy($tmp, $abs) : move_uploaded_file($tmp, $abs);
         if (!$moved) {
-            throw new \RuntimeException('Could not save the file. Check that public/media is writable.');
+            throw new \RuntimeException(__('Could not save the file. Check that public/media is writable.'));
         }
         @chmod($abs, $type === 'document' ? 0600 : 0644);
         if ($type === 'image') {

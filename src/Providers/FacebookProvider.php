@@ -9,7 +9,10 @@ final class FacebookProvider extends AbstractProvider
     public function meta(): array
     {
         return ['name' => 'Facebook Page', 'color' => '#1877F2', 'letter' => 'f', 'kind' => 'oauth', 'app' => 'meta',
-            'description' => 'Publish to Facebook Pages you manage (personal profiles can’t be posted to by any app).'];
+            'description' => 'Publish posts, Reels and Stories to Facebook Pages you manage (personal profiles can’t be posted to by any app).',
+            'content_types' => ['post' => __('Post'), 'reel' => __('Reel'), 'story' => __('Story')],
+            'content_rules' => ['reel' => ['media' => 'video', 'max_media' => 1], 'story' => ['media' => 'required', 'max_media' => 1]],
+        ];
     }
 
     public function limits(array $meta = []): array
@@ -40,10 +43,48 @@ final class FacebookProvider extends AbstractProvider
         return $accounts;
     }
 
+    public function metrics(array $credentials, string $externalId, array $meta = []): ?array
+    {
+        if (!str_contains($externalId, '_')) {
+            return null; // Reels and Stories: Facebook reports these elsewhere.
+        }
+        $m = MetaGraph::call('GET', $externalId, ['fields' => 'reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares', 'access_token' => (string) $credentials['access_token']]);
+        return ['likes' => (int) ($m['reactions']['summary']['total_count'] ?? 0), 'comments' => (int) ($m['comments']['summary']['total_count'] ?? 0), 'shares' => (int) ($m['shares']['count'] ?? 0)];
+    }
+
+    /** Reels and video Stories: start → Facebook fetches the hosted file → finish. */
+    private function uploadVideo(string $page, string $token, string $edge, array $m, array $finish): array
+    {
+        $start = MetaGraph::call('POST', $page . '/' . $edge, ['upload_phase' => 'start', 'access_token' => $token]);
+        $videoId = (string) $start['video_id'];
+        $up = $this->http('POST', (string) ($start['upload_url'] ?? 'https://rupload.facebook.com/video-upload/' . MetaGraph::version() . '/' . $videoId), [
+            'headers' => ['Authorization: OAuth ' . $token, 'file_url: ' . $m['url']], 'timeout' => 300,
+        ]);
+        if ($up['status'] < 200 || $up['status'] >= 300 || empty($up['json']['success'])) {
+            throw new ProviderException('Facebook: the video upload failed' . (isset($up['json']['debug_info']['message']) ? ': ' . $up['json']['debug_info']['message'] : '.'), $up['status'] >= 500);
+        }
+        return ['video_id' => $videoId] + MetaGraph::call('POST', $page . '/' . $edge, ['upload_phase' => 'finish', 'video_id' => $videoId, 'access_token' => $token] + $finish);
+    }
+
     public function publish(array $credentials, string $text, array $media, array $meta = [], array $context = []): PublishResult
     {
         $page = (string) $credentials['page_id'];
         $token = (string) $credentials['access_token'];
+        $type = $this->type($context);
+        if ($type === 'reel') {
+            $r = $this->uploadVideo($page, $token, 'video_reels', $media[0], ['video_state' => 'PUBLISHED', 'description' => $text]);
+            return new PublishResult($r['video_id'], 'https://www.facebook.com/reel/' . $r['video_id']);
+        }
+        if ($type === 'story') {
+            if ($media[0]['type'] === 'video') {
+                $r = $this->uploadVideo($page, $token, 'video_stories', $media[0], []);
+            } else {
+                $photo = MetaGraph::call('POST', $page . '/photos', ['url' => $media[0]['url'], 'published' => 'false', 'access_token' => $token]);
+                $r = MetaGraph::call('POST', $page . '/photo_stories', ['photo_id' => (string) $photo['id'], 'access_token' => $token]);
+            }
+            $id = (string) ($r['post_id'] ?? $r['video_id'] ?? '');
+            return new PublishResult($id, null);
+        }
         if ($media && $media[0]['type'] === 'video') {
             $j = MetaGraph::call('POST', $page . '/videos', ['file_url' => $media[0]['url'], 'description' => $text, 'access_token' => $token], ['timeout' => 300]);
             $id = (string) $j['id'];

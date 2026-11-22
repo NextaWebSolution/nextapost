@@ -25,6 +25,26 @@ final class Worker
     public function tick(string $workerId, int $deadline): int
     {
         $this->publisher->enqueueDue();
+        try {
+            (new RecurrenceService($this->db))->spawnDue();
+        } catch (\Throwable $e) {
+            Logger::error('Recurring posts: ' . $e->getMessage());
+        }
+        try {
+            (new FeedService($this->db))->fetchDue(5);
+        } catch (\Throwable $e) {
+            Logger::error('Feeds: ' . $e->getMessage());
+        }
+        try {
+            (new MetricsService($this->db))->refreshDue(10);
+        } catch (\Throwable $e) {
+            Logger::error('Metrics: ' . $e->getMessage());
+        }
+        try {
+            (new RepurposeService($this->db))->pollDue(2);
+        } catch (\Throwable $e) {
+            Logger::error('Repurpose: ' . $e->getMessage());
+        }
         $processed = 0;
         while (time() < $deadline && ($job = $this->queue->claim($workerId))) {
             $this->handle($job);
@@ -36,7 +56,11 @@ final class Worker
     public function handle(array $job): void
     {
         try {
-            $this->publisher->handleJob($job);
+            match ($job['type']) {
+                'email' => \App\Core\Mailer::send((string) $job['payload']['to'], (string) $job['payload']['subject'], (string) $job['payload']['html']),
+                'webhook' => (new WebhookService($this->db))->deliver((int) ($job['payload']['delivery_id'] ?? 0)),
+                default => $this->publisher->handleJob($job),
+            };
             $this->queue->complete((int) $job['id']);
         } catch (ProviderException $e) {
             if ($e->retryable && (int) $job['attempts'] < (int) $job['max_attempts']) {
@@ -92,6 +116,8 @@ final class Worker
         }
         Settings::set('housekeeping_at', now_utc());
         $this->queue->prune();
+        (new WebhookService($this->db))->prune();
+        (new OAuthService($this->db))->prune();
         Logger::prune();
         $this->db->run('DELETE FROM rate_limits WHERE reset_at < ?', [time()]);
         $this->db->run('DELETE FROM password_resets WHERE expires_at < ?', [now_utc(-86400)]);

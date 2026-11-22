@@ -112,10 +112,47 @@ function to_local(?string $utc, string $tz, string $format = 'Y-m-d H:i'): strin
         return '';
     }
     try {
-        return (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone(new DateTimeZone($tz))->format($format);
+        $dt = (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone(new DateTimeZone($tz));
+        return localize_date_names($dt, $format, $dt->format($format));
     } catch (\Throwable) {
         return '';
     }
+}
+
+/**
+ * Swaps English day and month names (format letters D, l, M, F) for the interface language's,
+ * when PHP's intl extension is available. Numbers and other formats are left alone.
+ */
+function localize_date_names(DateTimeInterface $dt, string $format, string $out): string
+{
+    $lang = \App\Core\Lang::current();
+    if ($lang === 'en' || !class_exists(\IntlDateFormatter::class) || !preg_match('/(?<!\\\\)[DlMF]/', $format)) {
+        return $out;
+    }
+    $pairs = [];
+    foreach (['l' => 'EEEE', 'F' => 'MMMM', 'D' => 'EEE', 'M' => 'MMM'] as $letter => $pattern) {
+        if (!str_contains($format, $letter)) {
+            continue;
+        }
+        $f = new \IntlDateFormatter($lang, \IntlDateFormatter::NONE, \IntlDateFormatter::NONE, $dt->getTimezone()->getName(), null, $pattern);
+        $local = $f->format($dt);
+        if (is_string($local) && $local !== '') {
+            $pairs[$dt->format($letter)] = $local;
+        }
+    }
+    // Longest English names first, so "May" inside "Mayday" style overlaps can't happen out of order.
+    uksort($pairs, fn ($a, $b) => strlen($b) <=> strlen($a));
+    return strtr($out, $pairs);
+}
+
+/** Short weekday name ("mon" … "sun") in the interface language. */
+function weekday_name(string $key): string
+{
+    $offset = array_search($key, ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], true);
+    if ($offset === false) {
+        return ucfirst($key);
+    }
+    return to_local(sprintf('2024-01-%02d 12:00:00', 1 + $offset), 'UTC', 'D'); // 1 Jan 2024 was a Monday
 }
 
 /** Converts a wall-clock time in $tz ("2026-11-20T10:30", "2026-11-20 10:30:00", trailing Z ignored) to UTC. */
@@ -194,24 +231,25 @@ function human_bytes(int $bytes): string
 function time_ago(?string $utc): string
 {
     if (!$utc) {
-        return 'never';
+        return __('never');
     }
     $s = time() - strtotime($utc . ' UTC');
     return match (true) {
-        $s < 60 => 'just now',
-        $s < 3600 => intdiv($s, 60) . ' min ago',
-        $s < 86400 => intdiv($s, 3600) . ' h ago',
-        default => intdiv($s, 86400) . ' d ago',
+        $s < 60 => __('just now'),
+        $s < 3600 => __('{n} min ago', ['n' => intdiv($s, 60)]),
+        $s < 86400 => __('{n} h ago', ['n' => intdiv($s, 3600)]),
+        default => __('{n} d ago', ['n' => intdiv($s, 86400)]),
     };
 }
 
 function status_label(string $status): string
 {
-    return [
-        'draft' => 'Draft', 'in_review' => 'In review', 'scheduled' => 'Scheduled', 'publishing' => 'Publishing',
-        'published' => 'Published', 'partially_published' => 'Partly published', 'failed' => 'Failed', 'cancelled' => 'Cancelled',
-        'pending' => 'Waiting', 'queued' => 'Queued',
-    ][$status] ?? ucfirst(str_replace('_', ' ', $status));
+    return match ($status) {
+        'draft' => __('Draft'), 'in_review' => __('In review'), 'scheduled' => __('Scheduled'), 'publishing' => __('Publishing'),
+        'published' => __('Published'), 'partially_published' => __('Partly published'), 'failed' => __('Failed'), 'cancelled' => __('Cancelled'),
+        'pending' => __('Waiting'), 'queued' => __('Queued'),
+        default => ucfirst(str_replace('_', ' ', $status)),
+    };
 }
 
 function status_badge(string $status): string
@@ -224,6 +262,16 @@ function icon(string $name, string $class = 'size-5'): string
 {
     static $paths = [
         'calendar' => '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+        'tag' => '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+        'repeat' => '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+        'sparkles' => '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+        'key' => '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.8-9.8M17 6l3 3M14 9l2 2"/>',
+        'link' => '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+        'bulb' => '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V18h6v-1.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/>',
+        'rss' => '<path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>',
+        'message' => '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+        'globe' => '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
+        'bell' => '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
         'list' => '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
         'check' => '<path d="M20 6 9 17l-5-5"/>',
         'check-circle' => '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>',
@@ -332,4 +380,62 @@ function log_activity(?int $workspaceId, string $action, string $message, ?strin
     } catch (\Throwable) {
         // Activity logging must never break the request.
     }
+}
+
+/** Translate interface text (English text is the key). */
+function __(string $text, array $vars = []): string
+{
+    return \App\Core\Lang::translate($text, $vars);
+}
+
+/** A string as a JavaScript literal for use inside an Alpine attribute (quotes and HTML escaped). */
+function js(string $text): string
+{
+    return e((string) json_encode($text, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP));
+}
+
+/** 1234 → 1.2K, 2500000 → 2.5M */
+function short_number(int $n): string
+{
+    foreach ([1_000_000_000 => 'B', 1_000_000 => 'M', 1_000 => 'K'] as $div => $suffix) {
+        if (abs($n) >= $div) {
+            return rtrim(rtrim(number_format($n / $div, 1, '.', ''), '0'), '.') . $suffix;
+        }
+    }
+    return (string) $n;
+}
+
+/**
+ * Translate a sentence and insert HTML pieces (links, bold names) for its {placeholders}.
+ * The sentence itself is escaped; each piece must already be safe HTML.
+ */
+function __html(string $text, array $html = [], array $vars = []): string
+{
+    $out = e(__($text, $vars));
+    foreach ($html as $k => $piece) {
+        $out = str_replace('{' . $k . '}', (string) $piece, $out);
+    }
+    return $out;
+}
+
+/** A LIKE '%…%' pattern for user search text: trimmed, capped at 100 characters, wildcards escaped (use with ESCAPE '!'). */
+function like_pattern(string $search): string
+{
+    $search = mb_substr(trim($search), 0, 100);
+    return '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
+}
+
+/** Text from untrusted input: scalars become strings, anything else (arrays from crafted forms) becomes $default. */
+function str_val(mixed $v, string $default = ''): string
+{
+    return is_scalar($v) ? (string) $v : $default;
+}
+
+/** A same-site path that is safe to redirect to ("/…", never "//…", "/\\…", a backslash or control characters); otherwise $fallback. */
+function safe_local_path(mixed $to, string $fallback = '/'): string
+{
+    if (!is_string($to) || $to === '' || $to[0] !== '/' || str_starts_with($to, '//') || strpbrk($to, "\\\r\n\t\0") !== false) {
+        return $fallback;
+    }
+    return $to;
 }

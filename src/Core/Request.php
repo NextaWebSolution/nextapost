@@ -55,6 +55,13 @@ final class Request
         return is_scalar($v) ? trim((string) $v) : $default;
     }
 
+    /** Untrimmed text (passwords): scalars only, anything else is ''. */
+    public function raw(string $key): string
+    {
+        $v = $this->input($key, '');
+        return is_scalar($v) ? (string) $v : '';
+    }
+
     public function arr(string $key): array
     {
         $v = $this->input($key, []);

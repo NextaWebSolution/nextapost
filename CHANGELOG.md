@@ -1,5 +1,57 @@
 # Changelog
 
+## 2.0.0 — 2026-11-21
+
+The biggest NextaPost release so far: AI agents and an API, seven new networks, an ideas board, repurposing, team notes and 18 interface languages.
+
+New — AI and automation:
+- **MCP server** at `/mcp`: connect Claude, ChatGPT or any MCP app as a custom connector, sign in, pick a workspace, and let it draft, schedule and manage posts. 57 tools; approvals and roles still apply
+- **REST API** (`/api/v1`) with the same 57 operations: posts (single and batch), channels, posting schedules, media upload or import from a link, labels, signatures, templates, notes, ideas, feeds and webhooks. Full reference in `docs/API.md`
+- **API keys** per workspace (optionally with a lower role and an expiry) and **OAuth 2.1 sign-in** for apps (PKCE, dynamic client registration, rotating refresh tokens); Developers & AI page to manage keys and connected apps
+- **Webhooks** for post events (created, scheduled, approved, published, failed and more), signed with HMAC-SHA256, retried, paused after repeated failures, with a delivery log and replay
+- **AI writing assistant** with your own key (OpenAI, Anthropic, Google Gemini or any OpenAI-compatible service): write from an idea, rephrase, shorten, lengthen, change tone, fix spelling, translate, fit a channel's limit, add hashtags, and write alt text for images. Brand voice per workspace
+
+New — planning and publishing:
+- **Posting times and queue**: weekly posting times per channel, "Add to queue" takes each channel's next free time, suggested times
+- **Recurring posts** (daily, weekly, monthly, yearly, with an end)
+- **Ideas board** with columns, drag and drop, labels and "turn into post"; **RSS / Atom / JSON feeds** inbox that can save new articles as ideas automatically
+- **Repurpose**: new Instagram or Threads posts are copied to the channels you choose (for example Reels to TikTok, Shorts and Facebook)
+- **Labels** to colour-code posts and filter the calendar, **signatures** (reusable hashtags or call to action) and **templates**
+- **Team notes** on posts with @mentions and email notifications
+- **Post analytics**: likes, comments, shares and views fetched for 30 days after publishing (Instagram, Facebook, X, YouTube, Threads, Mastodon, Bluesky)
+- **Media sources**: add photos and designs from Unsplash, Canva, Google Photos and Google Drive, or import from a link
+
+New — networks:
+- **WordPress** (posts with featured image, category, tags and excerpt; published, draft or pending review), **Threads** (posts, polls, ghost posts), **Instagram** without a Facebook Page (Instagram Login), **Pinterest** (image, video and carousel pins), **YouTube** (videos and Shorts), **Google Business Profile** (updates, events, offers), **TikTok** (video and photo posts with the creator privacy rules)
+- X and Mastodon **polls**; Facebook **Reels and Stories**; Instagram **Reels, Stories** and first comment
+- Per-channel post types and options in the composer, checked before publishing
+
+New — languages:
+- **18 interface languages**: English, Hindi, Bengali, Arabic (right to left), German, Greek, Spanish, French, Italian, Japanese, Korean, Dutch, Polish, Portuguese, Russian, Turkish, Ukrainian and Chinese. Each person picks theirs under Your account
+- Hindi and Bengali are fully translated; the other languages cover the everyday screens and show English for rarer text
+- **System → Languages**: see coverage and fill missing text with a workspace's AI key; those translations are kept across updates
+- Dates, day and month names follow the chosen language
+
+Security (from the 2.0 audit, see SECURITY-AUDIT.md):
+- API keys, connected AI apps and repurposing rules stop working as soon as their owner is deactivated
+- Contributors can change only their own posts, in the app and through the API
+- Removing a member revokes their API keys and connected apps for that workspace; deleting an account also removes its API access, Canva/Google sign-ins and personal settings
+- OAuth redirect addresses must have a valid host; sign-in redirects stay on this site
+- Searches are capped and wildcard-safe; unexpected input types no longer cause server errors
+
+Upgrade notes:
+- Two database migrations run automatically (from the in-app updater, or on the first page load after copying the files yourself)
+- New optional `.env` settings: `API_RATE_LIMIT`, `AI_RATE_LIMIT`, `AI_TRANSLATE_RATE_LIMIT`, `MCP_ALLOWED_ORIGINS`
+- The new networks each need their own developer app in System → Integrations, and some need the network's approval before they can post for other people (Meta App Review, TikTok audit, Pinterest Standard access, Google Business Profile API access, YouTube quota)
+
+## 1.1.2 — 2026-11-19
+
+Fixed:
+- On phones, the post editor was wider than the screen, so long text and the channel tabs were cut off on the right
+
+Other:
+- New README with screenshots (light and dark), network support table and FAQ
+
 ## 1.1.1 — 2026-11-18
 
 Fixed:

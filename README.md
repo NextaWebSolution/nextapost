@@ -4,11 +4,11 @@
 
 # NextaPost — Self-Hosted Social Media Scheduler & Content Calendar
 
-**Plan, approve and publish posts to LinkedIn, Instagram, Facebook, X (Twitter), Telegram, Discord, Mastodon and Bluesky from one calendar, on your own cPanel hosting.**
+**Plan, approve and publish posts to LinkedIn, Instagram, Facebook, X (Twitter), TikTok, YouTube, Pinterest, Threads, Google Business Profile, WordPress, Telegram, Discord, Mastodon and Bluesky from one calendar, on your own cPanel hosting. Let AI assistants schedule for you over MCP, or automate with the REST API.**
 
 Built with plain **PHP 8 + MySQL + Tailwind CSS + Alpine.js**. No Docker, Node.js, Redis or monthly SaaS fees.
 
-[![Version](https://img.shields.io/badge/version-1.1.2-7c3aed?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-7c3aed?style=flat-square)](CHANGELOG.md)
 [![PHP](https://img.shields.io/badge/PHP-8.1%2B-777bb4?style=flat-square&logo=php&logoColor=white)](#requirements)
 [![MySQL](https://img.shields.io/badge/MySQL-5.7%2B%20%7C%20MariaDB-4479a1?style=flat-square&logo=mysql&logoColor=white)](#requirements)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)](#development)
@@ -16,7 +16,7 @@ Built with plain **PHP 8 + MySQL + Tailwind CSS + Alpine.js**. No Docker, Node.j
 [![cPanel ready](https://img.shields.io/badge/cPanel-ready-ff6c2c?style=flat-square&logo=cpanel&logoColor=white)](#install-on-cpanel-about-5-minutes)
 [![Security audited](https://img.shields.io/badge/security-audited-16a34a?style=flat-square)](SECURITY-AUDIT.md)
 
-[Features](#features) · [Screenshots](#screenshots) · [Supported networks](#supported-social-networks) · [Recommended hosting](#recommended-hosting) · [Install](#install-on-cpanel-about-5-minutes) · [FAQ](#faq)
+[Features](#features) · [Screenshots](#screenshots) · [Supported networks](#supported-social-networks) · [AI & API](#ai-assistants-api-and-webhooks) · [Recommended hosting](#recommended-hosting) · [Install](#install-on-cpanel-about-5-minutes) · [FAQ](#faq)
 
 <p>
   <sub>A product by</sub><br>
@@ -36,7 +36,10 @@ NextaPost is a **self-hosted alternative to Buffer, Hootsuite and Postiz** for a
 
 - 🗓️ **One content calendar for every channel**: week, month and list views with drag-and-drop rescheduling.
 - ✅ **Team approvals**: contributors draft, approvers sign off, and nothing goes live by accident.
+- 🤖 **Works with AI assistants**: connect Claude, ChatGPT or any MCP app and let it draft and schedule posts, with your approvals still in charge.
+- ✍️ **AI writing help with your own key**: rewrite, shorten, translate, add hashtags and write alt text, billed by your AI provider, not by us.
 - 📑 **LinkedIn document carousels**: post a PDF or PowerPoint as a swipeable slide post on profiles and company Pages.
+- 🌍 **18 languages**: Hindi and Bengali complete, Arabic right to left, and 15 more for the everyday screens.
 - 🔒 **Your server, your data**: tokens are encrypted and files stay private, with no third-party SaaS in between.
 - 🧩 **Runs on ordinary shared hosting**: upload, open the web installer, add one cron job. Done.
 
@@ -53,7 +56,17 @@ NextaPost runs on any cPanel host with PHP 8.1+ and MySQL. For the smoothest set
 | **Content calendar** | Week / Month / List views, drag-and-drop rescheduling, unscheduled-drafts panel, "now" line, per-workspace time zone, keyboard shortcuts (← → T N) |
 | **Post composer** | One text for all channels plus per-channel edits, live character counters per network (X counts links as 23), media upload and library, live post preview, Post now / Schedule / Draft / Submit for review |
 | **Documents & carousels** | Upload **PDF, PowerPoint (PPTX) or Word (DOCX)** and post it as a swipeable document on LinkedIn (profiles and Pages), or as a file on Telegram and Discord. Different media per channel in one post (e.g. the PDF for LinkedIn, slide images for Instagram) |
-| **Social networks** | Facebook Pages, Instagram (feed, carousel, Reels), LinkedIn profiles and company Pages, X/Twitter, Telegram, Discord, Mastodon, Bluesky, plus a Sandbox test channel |
+| **Social networks** | Facebook Pages (posts, Reels, Stories), Instagram (feed, carousel, Reels, Stories, with or without a Facebook Page), LinkedIn profiles and company Pages, X/Twitter (with polls), TikTok, YouTube (videos and Shorts), Pinterest, Threads, Google Business Profile, WordPress, Telegram, Discord, Mastodon, Bluesky, plus a Sandbox test channel |
+| **Posting times & queue** | Weekly posting times per channel with suggested times; "Add to queue" gives each channel its next free slot. Recurring posts (daily, weekly, monthly, yearly) |
+| **Ideas & feeds** | Ideas board with columns and drag and drop, "turn into post", and an inbox of new articles from RSS, Atom and JSON feeds that can become ideas automatically |
+| **Repurpose** | New Instagram or Threads posts are copied to the channels you choose, e.g. every Reel to TikTok, YouTube Shorts and Facebook |
+| **Labels, signatures & templates** | Colour-code posts by campaign or client and filter the calendar; reusable hashtag/CTA blocks; templates for posts you write every week |
+| **Team notes** | Comments on each post with @mentions and email notifications |
+| **Analytics** | Likes, comments, shares and views fetched for 30 days after publishing, shown per channel |
+| **Media sources** | Add images from Unsplash, Canva designs, Google Photos and Google Drive, or import from a link |
+| **AI writing assistant** | Bring your own key (OpenAI, Anthropic, Gemini or any OpenAI-compatible service): write from an idea, rephrase, change tone, shorten, translate, fit a channel's limit, hashtags, image alt text, brand voice per workspace |
+| **AI agents (MCP) & REST API** | MCP server with 57 tools, REST API, API keys, OAuth 2.1 sign-in for apps, signed webhooks with retries and replay. See [docs/API.md](docs/API.md) |
+| **Languages** | 18 interface languages per user (Hindi and Bengali complete, Arabic right to left); fill missing text with your AI key in System → Languages |
 | **Teams & agencies** | Unlimited workspaces (one per client or brand), roles (Admin, Editor, Contributor, Approver, Viewer), approval workflow with "request changes" notes, activity log |
 | **Publishing engine** | Cron-driven job queue with atomic claims, automatic retries with back-off (1 / 5 / 15 min), partial-publish tracking, token refresh, channels flagged for reconnect on auth errors |
 | **Light, dark & auto theme** | Saved per user |
@@ -154,6 +167,12 @@ Attach a PDF or PPTX and LinkedIn shows it as a swipeable slide carousel. Works 
 | **Telegram** | album up to 10 | 1 | **Yes**: sent as a file, up to 50 MB | PDF as a file, or images as an album |
 | **Discord** | up to 10 | 1 | **Yes**: attached file, up to 10 MB | PDF attachment |
 | **Mastodon / Bluesky** | 4 | 1 | No | Up to 4 slide images |
+| **Threads** | carousel up to 20 | 1 | No | Slide images as a carousel |
+| **Pinterest** | carousel pin 2–5 | 1 (video pin) | No | Images as a carousel pin |
+| **TikTok** | photo post up to 35 | 1 | No | Slide images as a photo post |
+| **YouTube** | — | 1 (video or Short) | No | Export as a video |
+| **Google Business Profile** | 1 | — | No | One image per update |
+| **WordPress** | featured image | — | No | Link to the PDF in the post |
 
 When a post has a document and also a channel that can't take documents, the composer names that channel and lets you give it its own media with one click. Documents are stored outside the public folder, so only signed-in members of the workspace can download them. Files with scripts, macros, embedded files, passwords or remote templates are refused.
 
@@ -200,7 +219,31 @@ Create a developer app on each network and paste its keys in **System → Integr
 | LinkedIn (profile) | linkedin.com/developers → *Share on LinkedIn* + *Sign In with LinkedIn (OpenID Connect)* | Self-serve. Tokens last 60 days. |
 | LinkedIn Page (company) | A **second** app linked to your company Page → request *Community Management API* | LinkedIn review required. The person connecting must be a Page super admin or content admin. |
 | X (Twitter) | developer.x.com → OAuth 2.0, Web App, read + write | X bills API usage to your developer account. |
+| Instagram (without a Facebook Page) | developers.facebook.com → app with *Instagram API with Instagram Login* | Needs Meta App Review for `instagram_business_content_publish`. Professional (Business/Creator) account. |
+| Threads | developers.facebook.com → app with the *Threads API* use case | Needs Meta App Review to post for accounts other than the app's testers. |
+| TikTok | developers.tiktok.com → app with *Login Kit* + *Content Posting API* (Direct Post) | Until TikTok **audits** the app, posts can only be private (“Only me”). |
+| Pinterest | developers.pinterest.com → app | Trial access posts to a sandbox; request **Standard access** to post live. |
+| YouTube | console.cloud.google.com → OAuth client (Web) + *YouTube Data API v3* | Default quota is about 6 uploads a day; request more in Google Cloud. |
+| Google Business Profile | Same Google OAuth client + the *Business Profile* APIs | Google must approve your project for the Business Profile API first. |
+| WordPress | No app: in WordPress create an *Application Password* (Users → Profile) | The site must use HTTPS. |
 | Telegram / Discord / Mastodon / Bluesky | No app review: bot token, webhook, access token or app password | |
+
+## AI assistants, API and webhooks
+
+Every workspace has a **Developers & AI** page.
+
+- **Connect an AI assistant (MCP):** add `https://your-site/mcp` as a custom connector in Claude, ChatGPT or another MCP app, sign in to NextaPost and pick the workspace. The assistant gets the same access as you, or less, and approvals still apply. Try: “Plan three posts for next week about our Diwali offer and send them for approval.”
+- **REST API:** create an API key and send it as `Authorization: Bearer np_…` to `https://your-site/api/v1`. Works with Zapier, Make, n8n and your own scripts.
+- **Webhooks:** get a signed HTTPS request when a post is created, scheduled, approved, published or fails.
+- **AI writing assistant:** in Team & settings, add your own OpenAI, Anthropic, Gemini or OpenAI-compatible key. You pay the provider directly; nothing goes through Nexta's servers.
+
+The full reference for all 57 operations, the endpoints and webhook signatures is in **[docs/API.md](docs/API.md)**.
+
+## Languages
+
+Each person chooses their language under **Your account**: English, हिन्दी (Hindi), বাংলা (Bengali), العربية (Arabic, right to left), Deutsch, Ελληνικά, Español, Français, Italiano, 日本語, 한국어, Nederlands, Polski, Português, Русский, Türkçe, Українська and 简体中文. Hindi and Bengali are complete. The other languages cover the screens you use every day; rarer text shows in English until it is translated.
+
+**System → Languages** shows how complete each language is and can fill the missing text with the AI key of one of your workspaces. Those translations, and any you write yourself in `storage/lang/<code>.php`, are kept when you update.
 
 ## Updates
 
@@ -262,13 +305,17 @@ npm i tailwindcss@4 && node tools/build-css.mjs
 
 # Local server + tests (SQLite, no network needed)
 php -S 127.0.0.1:8090 -t public tests/router.php
-bash tests/run.sh               # 197 integration + 24 updater checks
+bash tests/run.sh               # 649 integration + 24 updater checks
 python3 tests/e2e.py http://127.0.0.1:8090   # Playwright browser test (needs an installed copy)
+# More browser suites: e2e_v2, e2e_dev, e2e_oauth, e2e_ai, e2e_networks, e2e_repurpose, e2e_ideas,
+# e2e_media_sources, e2e_i18n, plus tests/mcp_client.py (see each file's header for its arguments)
 python3 tests/e2e_docs.py http://127.0.0.1:8090 deck.pdf   # documents + per-channel media (after adding a Mastodon channel named Masto)
 php tests/security_setup.php > /tmp/sec.json && python3 tests/security_http.py http://127.0.0.1:8090 /tmp/sec.json   # 53 attack simulations
 ```
 
-**Project structure:** `src/Core` (router, DB, sessions, crypto, mailer), `src/Services` (posts, publishing, queue, worker, media, updater, backup, installer), `src/Providers` (one class per network), `src/Controllers`, `views/` (PHP templates), `public/assets` (compiled CSS, Alpine.js components), `database/` (schema and migrations).
+**Project structure:** `src/Core` (router, DB, sessions, crypto, mailer, translations), `src/Services` (posts, publishing, queue, worker, media, AI, API/MCP, OAuth, webhooks, ideas, feeds, repurpose, updater, backup, installer), `src/Providers` (one class per network), `src/Controllers`, `views/` (PHP templates), `lang/` (interface languages), `public/assets` (compiled CSS, Alpine.js components), `database/` (schema and migrations).
+
+**Translations:** interface text is written in English inside `__('…')` (PHP) or `np.t('…')` (JavaScript). After adding text, run `php tools/i18n-extract.php --write` to update `lang/_keys.json` and the browser string list, then add translations to `lang/<code>.php`. `php tools/api-docs.php` regenerates `docs/API.md`.
 
 **Adding a network:** create `src/Providers/YourNetworkProvider.php` extending `AbstractProvider` (implement `meta()`, `limits()`, `connect()` or the OAuth pair, and `publish()`), then register it in `ProviderFactory::MAP`.
 
@@ -327,6 +374,6 @@ Proprietary © Nexta Web Solution Pvt. Ltd. Bundled third-party components: Alpi
   <a href="https://thepowerhost.in/?utm_source=github&utm_medium=readme&utm_campaign=nextapost"><img src="docs/brand/tphost-logo.png" alt="TPHOST by The PowerHost — recommended hosting for NextaPost" height="30"></a>
 </p>
 
-<sub>Keywords: self-hosted social media scheduler, social media management tool, content calendar, PHP social media scheduler, Buffer alternative, Hootsuite alternative, Postiz alternative, LinkedIn scheduler, LinkedIn PDF carousel, Instagram scheduler, cPanel social media app, India cPanel hosting.</sub>
+<sub>Keywords: self-hosted social media scheduler, MCP server for social media, AI social media assistant, social media API, social media management tool, content calendar, PHP social media scheduler, Buffer alternative, Hootsuite alternative, Postiz alternative, LinkedIn scheduler, LinkedIn PDF carousel, Instagram scheduler, cPanel social media app, India cPanel hosting.</sub>
 
 </div>

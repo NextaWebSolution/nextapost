@@ -11,6 +11,9 @@ use App\Core\Response;
 use App\Core\Session;
 use App\Providers\ProviderFactory;
 use App\Services\MediaService;
+use App\Services\ScheduleService;
+use App\Services\NoteService;
+use App\Services\LibraryService;
 use App\Services\PostService;
 use App\Services\PublishService;
 use App\Services\Queue;
@@ -22,11 +25,21 @@ final class PostController extends Controller
         return new PostService($this->db);
     }
 
+    /** The post, if this person may change it (contributors: only their own). */
+    private function ownPost(string $id): array
+    {
+        $p = $this->post($id);
+        if (!\App\Core\Gate::canChangePost($this->role, $p, (int) Auth::user()['id'])) {
+            throw new HttpException(403, __('Contributors can only change their own posts.'));
+        }
+        return $p;
+    }
+
     private function post(string $id): array
     {
         $p = $this->svc()->find((int) $this->ws['id'], $id);
         if (!$p) {
-            throw new HttpException(404, 'That post doesn’t exist or was deleted.');
+            throw new HttpException(404, __('That post doesn’t exist or was deleted.'));
         }
         return $p;
     }
@@ -50,7 +63,7 @@ final class PostController extends Controller
         $q = $this->req->str('q');
         if ($q !== '') {
             $where .= " AND (title LIKE ? ESCAPE '!' OR body LIKE ? ESCAPE '!')";
-            $like = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q) . '%';
+            $like = like_pattern($q);
             array_push($params, $like, $like);
         }
         $page = max(1, (int) $this->req->str('page', '1'));
@@ -88,7 +101,17 @@ final class PostController extends Controller
             $default = to_local(gmdate('Y-m-d H:i:s', $next), (string) $this->ws['timezone'], 'Y-m-d\TH:i');
         }
         $preselect = array_values(array_filter(explode(',', $this->req->str('channels'))));
-        return $this->composer(null, ['publish_at' => $default, 'channels' => $preselect]);
+        $defaults = ['publish_at' => $default, 'channels' => $preselect];
+        if (($ideaId = $this->req->str('idea')) !== '' && ($idea = (new \App\Services\IdeaService($this->db))->find((int) $this->ws['id'], $ideaId))) {
+            $ideaFull = (new \App\Services\IdeaService($this->db))->get((int) $this->ws['id'], (int) $idea['id']);
+            $mediaRows = $ideaFull['media'] ? $this->svc()->mediaByUuid((int) $this->ws['id'], $ideaFull['media']) : [];
+            $defaults += [
+                'body' => \App\Services\IdeaService::postText($idea), 'idea' => $idea['uuid'],
+                'media' => array_map([MediaService::class, 'toJson'], array_values($mediaRows)),
+                'labels' => array_column($ideaFull['labels'], 'uuid'),
+            ];
+        }
+        return $this->composer(null, $defaults);
     }
 
     public function edit(string $ws, string $id): Response
@@ -111,26 +134,37 @@ final class PostController extends Controller
                 'color' => $m['color'], 'letter' => $m['letter'], 'avatar' => safe_url($c['avatar_url']), 'active' => $c['status'] === 'active',
                 'limit' => $l['text_max'], 'captionLimit' => $l['caption_max'] ?? null, 'mediaMax' => $l['media_max'], 'types' => $l['types'],
                 'mediaRequired' => !empty($l['media_required']), 'countUrlsAs' => $c['network'] === 'x' ? 23 : null,
+                'hasSchedule' => ScheduleService::slotCount(ScheduleService::decode($c['posting_schedule'] ?? null)) > 0,
+                'contentTypes' => (object) ($m['content_types'] ?? []), 'options' => $p->options($meta),
             ];
         }
         $targets = $post ? $this->svc()->targets((int) $post['id']) : [];
         $data = [
             'id' => $post['uuid'] ?? null,
             'status' => $post['status'] ?? 'new',
-            'statusLabel' => $post ? status_label($post['status']) : 'New post',
+            'statusLabel' => $post ? status_label($post['status']) : __('New post'),
             'version' => (int) ($post['version'] ?? 0),
-            'body' => (string) ($post['body'] ?? ''),
+            'body' => str_val($post['body'] ?? ($defaults['body'] ?? '')),
+            'idea' => $defaults['idea'] ?? null,
             'publish_at' => $post && $post['publish_at'] ? to_local($post['publish_at'], (string) $this->ws['timezone'], 'Y-m-d\TH:i') : ($defaults['publish_at'] ?? ''),
             'channels' => $post ? array_column($targets, 'channel_uuid') : ($defaults['channels'] ?? []),
             'overrides' => (object) array_column(array_filter($targets, static fn ($t) => $t['body_override'] !== null), 'body_override', 'channel_uuid'),
-            'media' => $post ? array_map([MediaService::class, 'toJson'], $this->svc()->media((int) $post['id'])) : [],
+            'media' => $post ? array_map([MediaService::class, 'toJson'], $this->svc()->media((int) $post['id'])) : ($defaults['media'] ?? []),
             'mediaOverrides' => (object) array_column(array_map(fn ($t) => [
                 'channel' => $t['channel_uuid'], 'media' => array_map([MediaService::class, 'toJson'], $this->svc()->targetMedia($t)),
             ], array_values(array_filter($targets, static fn ($t) => (int) $t['media_custom'] === 1))), 'media', 'channel'),
             'review_note' => $post['review_note'] ?? null,
-            'targets' => array_map(static fn ($t) => ['channel' => $t['channel_uuid'], 'status' => $t['status'], 'statusLabel' => status_label($t['status']), 'url' => safe_url($t['external_url']), 'error' => $t['last_error']], $targets),
+            'labels' => $post ? array_column((new LibraryService($this->db))->labelsForPosts([(int) $post['id']])[(int) $post['id']] ?? [], 'uuid') : ($defaults['labels'] ?? []),
+            'scheduleMode' => $post['schedule_mode'] ?? 'custom',
+            'recurrence' => ($rec = json_decode(str_val($post['recurrence'] ?? ''), true)) ? array_diff_key($rec, ['spawned' => 1, 'n' => 1]) : null,
+            'targetOptions' => (object) array_column(array_map(static fn ($t) => [
+                'channel' => $t['channel_uuid'], 'opt' => (json_decode((string) ($t['options_json'] ?? ''), true) ?: []) + ($t['content_type'] ? ['content_type' => $t['content_type']] : []),
+            ], array_values(array_filter($targets, static fn ($t) => $t['content_type'] || $t['options_json']))), 'opt', 'channel'),
+            'targets' => array_map(fn ($t) => ['channel' => $t['channel_uuid'], 'status' => $t['status'], 'statusLabel' => status_label($t['status']), 'url' => safe_url($t['external_url']), 'error' => $t['last_error'],
+                'metrics' => $this->db->one('SELECT likes, comments, shares, views, fetched_at FROM post_metrics WHERE target_id = ?', [$t['id']])], $targets),
         ];
-        $editable = $this->can('edit') && (!$post || in_array($post['status'], PostService::EDITABLE, true));
+        $editable = $this->can('edit') && (!$post || (in_array($post['status'], PostService::EDITABLE, true) && \App\Core\Gate::canChangePost($this->role, $post, (int) Auth::user()['id'])));
+        $lib = new LibraryService($this->db);
         return $this->view('posts/composer', [
             'title' => $post ? 'Edit post' : 'Create post',
             'post' => $post,
@@ -139,6 +173,7 @@ final class PostController extends Controller
                 'channels' => $channels,
                 'editable' => $editable,
                 'canPublish' => $this->can('publish'),
+                'canCreate' => $this->can('edit'),
                 'canApprove' => $this->can('approve') && $post && $post['status'] === 'in_review',
                 'tz' => $this->ws['timezone'],
                 'saveUrl' => $post ? $this->wsUrl('posts/' . $post['uuid']) : $this->wsUrl('posts'),
@@ -148,6 +183,20 @@ final class PostController extends Controller
                 'channelsUrl' => $this->wsUrl('channels'),
                 'maxUpload' => MediaService::maxBytes(),
                 'author' => Auth::user()['name'] ?? '',
+                'isAdmin' => $this->role === 'admin',
+                'labels' => array_map(static fn ($l) => ['id' => $l['uuid'], 'name' => $l['name'], 'color' => $l['color']], $lib->labels((int) $this->ws['id'])),
+                'signatures' => array_map(static fn ($x) => ['id' => $x['uuid'], 'name' => $x['name'], 'content' => $x['content'], 'default' => (bool) $x['is_default']], $lib->signatures((int) $this->ws['id'])),
+                'templates' => array_map(static fn ($x) => ['id' => $x['uuid'], 'title' => $x['title'], 'body' => $x['body']], $lib->templates((int) $this->ws['id'], (int) Auth::user()['id'])),
+                'libraryUrl2' => $this->wsUrl('library'),
+                'notes' => $post ? array_map(fn ($n) => LibraryController::presentNote($n, (int) Auth::user()['id']), (new NoteService($this->db))->list((int) $post['id'])) : [],
+                'notesUrl' => $post ? $this->wsUrl('posts/' . $post['uuid'] . '/notes') : null,
+                'members' => array_map(static fn ($m) => ['id' => $m['uuid'], 'name' => $m['name']], (new NoteService($this->db))->members((int) $this->ws['id'])),
+                'ai' => [
+                    'enabled' => \App\Services\AiService::configured($this->ws),
+                    'url' => $this->wsUrl('ai/assist'),
+                    'setupUrl' => $this->role === 'admin' ? $this->wsUrl('settings') . '#ai' : null,
+                    'languages' => array_values(array_map(static fn ($l) => $l[1], \App\Core\Lang::LOCALES)),
+                ],
             ],
         ]);
     }
@@ -163,14 +212,14 @@ final class PostController extends Controller
     {
         $this->workspace($ws);
         $this->authorize('edit');
-        return $this->persist($this->post($id));
+        return $this->persist($this->ownPost($id));
     }
 
     private function persist(?array $existing): Response
     {
-        $res = $this->svc()->save($this->ws, Auth::user(), $this->role, $this->req->body, $existing);
+        $res = $this->svc()->save($this->ws, Auth::user(), $this->role, ['source' => 'web'] + array_diff_key($this->req->body, ['source' => 1]), $existing);
         if ($res['errors']) {
-            return $this->json(['error' => ['message' => 'Please fix the highlighted issues and try again.'], 'errors' => $res['errors']], 422);
+            return $this->json(['error' => ['message' => __('Please fix the highlighted issues and try again.')], 'errors' => $res['errors']], 422);
         }
         $post = $res['post'];
         if ($res['publish_now']) {
@@ -179,13 +228,13 @@ final class PostController extends Controller
             $post = $this->db->one('SELECT * FROM posts WHERE id = ?', [$post['id']]);
         }
         $msg = match ($post['status']) {
-            'draft' => 'Draft saved.',
-            'in_review' => 'Sent for review. An approver will check it.',
+            'draft' => __('Draft saved.'),
+            'in_review' => __('Sent for review. An approver will check it.'),
             'scheduled' => 'Scheduled for ' . to_local($post['publish_at'], (string) $this->ws['timezone'], 'D, d M · H:i') . '.',
             'published' => 'Published.',
             'publishing' => 'Publishing… we’ll keep trying any channel that didn’t go through.',
-            'partially_published' => 'Published to some channels — open the post to see what failed.',
-            'failed' => 'Publishing failed — open the post to see why.',
+            'partially_published' => __('Published to some channels — open the post to see what failed.'),
+            'failed' => __('Publishing failed — open the post to see why.'),
             default => 'Saved.',
         };
         Session::flash(in_array($post['status'], ['failed', 'partially_published'], true) ? 'error' : 'success', $msg);
@@ -196,21 +245,21 @@ final class PostController extends Controller
     {
         $this->workspace($ws);
         $this->authorize('edit');
-        $post = $this->post($id);
+        $post = $this->ownPost($id);
         $err = $this->svc()->move($this->ws, $post, $this->req->str('at'), $this->req->input('version') !== null ? (int) $this->req->input('version') : null);
         if ($err) {
             return $this->json(['error' => ['message' => $err]], 422);
         }
         $p = (array) $this->svc()->find((int) $this->ws['id'], $id);
-        return $this->json(['ok' => true, 'message' => 'Moved to ' . to_local($p['publish_at'], (string) $this->ws['timezone'], 'D, d M · H:i') . '.', 'version' => (int) $p['version']]);
+        return $this->json(['ok' => true, 'message' => __('Moved to {when}.', ['when' => to_local($p['publish_at'], (string) $this->ws['timezone'], 'D, d M · H:i')]), 'version' => (int) $p['version']]);
     }
 
     public function delete(string $ws, string $id): Response
     {
         $this->workspace($ws);
         $this->authorize('edit');
-        $err = $this->svc()->delete($this->ws, $this->post($id));
-        return $this->back($this->wsUrl('posts'), $err ? ['error' => $err] : ['success' => 'Post deleted.']);
+        $err = $this->svc()->delete($this->ws, $this->ownPost($id));
+        return $this->back($this->wsUrl('posts'), $err ? ['error' => $err] : ['success' => __('Post deleted.')]);
     }
 
     public function approve(string $ws, string $id): Response
@@ -221,7 +270,7 @@ final class PostController extends Controller
         if ($this->req->wantsJson()) {
             return $err ? $this->json(['error' => ['message' => $err]], 422) : $this->json(['ok' => true]);
         }
-        return $this->back($this->wsUrl('posts?status=in_review'), $err ? ['error' => $err] : ['success' => 'Approved and scheduled.']);
+        return $this->back($this->wsUrl('posts?status=in_review'), $err ? ['error' => $err] : ['success' => __('Approved and scheduled.')]);
     }
 
     public function reject(string $ws, string $id): Response
@@ -229,20 +278,20 @@ final class PostController extends Controller
         $this->workspace($ws);
         $this->authorize('approve');
         $err = $this->svc()->reject($this->ws, $this->post($id), $this->req->str('note'));
-        return $this->back($this->wsUrl('posts?status=in_review'), $err ? ['error' => $err] : ['success' => 'Sent back to the author with your note.']);
+        return $this->back($this->wsUrl('posts?status=in_review'), $err ? ['error' => $err] : ['success' => __('Sent back to the author with your note.')]);
     }
 
     public function retry(string $ws, string $id): Response
     {
         $this->workspace($ws);
         $this->authorize('edit');
-        $post = $this->post($id);
+        $post = $this->ownPost($id);
         $err = $this->svc()->retry($this->ws, $post);
         if (!$err) {
             @set_time_limit(180);
             (new PublishService($this->db, new Queue($this->db)))->publishPostNow((int) $post['id']);
             $status = (string) $this->db->value('SELECT status FROM posts WHERE id = ?', [$post['id']]);
-            return $this->back($this->wsUrl('posts'), $status === 'published' ? ['success' => 'Published on retry.'] : ['error' => 'Retry finished with status: ' . status_label($status) . '.']);
+            return $this->back($this->wsUrl('posts'), $status === 'published' ? ['success' => __('Published on retry.')] : ['error' => 'Retry finished with status: ' . status_label($status) . '.']);
         }
         return $this->back($this->wsUrl('posts'), ['error' => $err]);
     }
@@ -252,7 +301,7 @@ final class PostController extends Controller
         $this->workspace($ws);
         $this->authorize('edit');
         $copy = $this->svc()->duplicate($this->ws, Auth::user(), $this->post($id));
-        Session::flash('success', 'Copy created as a draft.');
+        Session::flash('success', __('Copy created as a draft.'));
         return $this->redirect($this->wsUrl('posts/' . $copy['uuid'] . '/edit'));
     }
 }

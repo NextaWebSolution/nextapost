@@ -8,6 +8,8 @@ $cfg = [
     'canEdit' => $canEdit,
     'tz' => $ws['timezone'],
     'drafts' => $drafts,
+    'ws' => $ws['uuid'],
+    'labels' => $labels,
 ];
 $head = '<script src="' . asset('js/calendar.js') . '"></script>';
 ?>
@@ -15,20 +17,20 @@ $head = '<script src="' . asset('js/calendar.js') . '"></script>';
   <!-- Side panel: channels + unscheduled drafts -->
   <div x-cloak x-show="panel" x-transition.opacity class="fixed inset-0 z-30 bg-black/40 xl:hidden" @click="panel=false"></div>
   <section class="fixed inset-y-0 right-0 z-40 flex w-72 translate-x-full flex-col border-l border-line bg-panel transition-transform xl:static xl:z-auto xl:translate-x-0 xl:border-l-0 xl:border-r"
-           :class="panel ? 'translate-x-0' : ''" aria-label="Channels and drafts">
+           :class="panel ? 'translate-x-0' : ''" aria-label="<?= e(__('Channels and drafts')) ?>">
     <div class="flex items-center justify-between border-b border-line px-4 py-3 xl:hidden">
-      <h2 class="font-semibold">Channels &amp; drafts</h2>
-      <button class="btn btn-ghost btn-icon" @click="panel=false" aria-label="Close"><?= icon('x', 'size-4') ?></button>
+      <h2 class="font-semibold"><?= e(__('Channels & drafts')) ?></h2>
+      <button class="btn btn-ghost btn-icon" @click="panel=false" aria-label="<?= e(__('Close')) ?>"><?= icon('x', 'size-4') ?></button>
     </div>
     <div class="flex-1 overflow-y-auto p-4 scroll-thin">
       <div class="flex items-center justify-between">
-        <h2 class="text-xs font-semibold uppercase tracking-wide text-subtle">Channels</h2>
-        <?php if ($canChannels): ?><a href="<?= e(url('/w/' . $ws['uuid'] . '/channels')) ?>" class="text-xs font-semibold text-brand-strong hover:underline dark:text-violet-300">Manage</a><?php endif; ?>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-subtle"><?= e(__('Channels')) ?></h2>
+        <?php if ($canChannels): ?><a href="<?= e(url('/w/' . $ws['uuid'] . '/channels')) ?>" class="text-xs font-semibold text-brand-strong hover:underline dark:text-violet-300"><?= e(__('Manage')) ?></a><?php endif; ?>
       </div>
       <?php if (!$channels): ?>
         <div class="mt-3 rounded-xl border border-dashed border-line p-4 text-center">
-          <p class="text-sm text-muted">No channels yet.</p>
-          <?php if ($canChannels): ?><a href="<?= e(url('/w/' . $ws['uuid'] . '/channels')) ?>" class="btn btn-primary btn-sm mt-3"><?= icon('plug', 'size-4') ?> Connect a channel</a><?php endif; ?>
+          <p class="text-sm text-muted"><?= e(__('No channels yet.')) ?></p>
+          <?php if ($canChannels): ?><a href="<?= e(url('/w/' . $ws['uuid'] . '/channels')) ?>" class="btn btn-primary btn-sm mt-3"><?= icon('plug', 'size-4') ?> <?= e(__('Connect a channel')) ?></a><?php endif; ?>
         </div>
       <?php else: ?>
         <ul class="mt-2 space-y-0.5">
@@ -37,25 +39,39 @@ $head = '<script src="' . asset('js/calendar.js') . '"></script>';
               <a href="<?= e(url('/w/' . $ws['uuid'] . '/posts/new', ['channels' => $ch['uuid']])) ?>" class="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-raised" title="Create a post for <?= e($ch['name']) ?>">
                 <?= channel_avatar($ch, 'size-7') ?>
                 <span class="min-w-0 flex-1"><span class="block truncate text-sm"><?= e($ch['name']) ?></span><span class="block truncate text-xs text-muted"><?= e(network_meta($ch['network'])['name']) ?></span></span>
-                <?php if ($ch['status'] !== 'active'): ?><span class="badge st-failed" title="<?= e($ch['last_error'] ?? '') ?>">Reconnect</span><?php endif; ?>
+                <?php if ($ch['status'] !== 'active'): ?><span class="badge st-failed" title="<?= e($ch['last_error'] ?? '') ?>"><?= e(__('Reconnect')) ?></span><?php endif; ?>
               </a>
             </li>
           <?php endforeach; ?>
         </ul>
       <?php endif; ?>
 
+      <?php if ($labels): ?>
+        <div class="mt-6 flex items-center justify-between">
+          <h2 class="text-xs font-semibold uppercase tracking-wide text-subtle"><?= e(__('Filter by label')) ?></h2>
+          <button type="button" class="text-xs font-semibold text-brand-strong hover:underline dark:text-violet-300" x-show="labelFilter.length" @click="labelFilter=[]"><?= e(__('Show all')) ?></button>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <template x-for="l in cfg.labels" :key="l.id">
+            <button type="button" class="label-chip" :class="labelFilter.includes(l.id) ? 'is-on' : ''" :style="'--lc:' + l.color" @click="toggleLabelFilter(l.id)" :aria-pressed="labelFilter.includes(l.id)">
+              <span class="size-2 rounded-full" :style="'background:' + l.color"></span><span x-text="l.name"></span>
+            </button>
+          </template>
+        </div>
+      <?php endif; ?>
+
       <div class="mt-6 flex items-center justify-between">
-        <h2 class="text-xs font-semibold uppercase tracking-wide text-subtle">Unscheduled drafts</h2>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-subtle"><?= e(__('Unscheduled drafts')) ?></h2>
         <span class="text-xs text-muted" x-text="drafts.length"></span>
       </div>
-      <p class="mt-1 text-xs text-muted" x-show="canEdit && drafts.length">Drag a draft onto the calendar to give it a date.</p>
+      <p class="mt-1 text-xs text-muted" x-show="canEdit && drafts.length"><?= e(__('Drag a draft onto the calendar to give it a date.')) ?></p>
       <div class="mt-2 space-y-1.5">
         <template x-for="d in drafts" :key="d.id">
           <button type="button" class="ev" :style="stVar(d.status)" :draggable="canEdit" @dragstart="dragStart($event, d, true)" @dragend="dragEnd()" @click="open(d)">
             <span class="ev-body"><span class="ev-avs" x-html="avatars(d)"></span><span class="ev-text" x-text="d.title"></span></span>
           </button>
         </template>
-        <p class="rounded-xl border border-dashed border-line p-3 text-center text-xs text-muted" x-show="!drafts.length">Drafts without a date show up here.</p>
+        <p class="rounded-xl border border-dashed border-line p-3 text-center text-xs text-muted" x-show="!drafts.length"><?= e(__('Drafts without a date show up here.')) ?></p>
       </div>
     </div>
   </section>
@@ -64,24 +80,24 @@ $head = '<script src="' . asset('js/calendar.js') . '"></script>';
   <div class="flex min-w-0 flex-1 flex-col">
     <div class="flex flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-2 sm:px-4">
       <div class="flex items-center gap-1">
-        <button class="btn btn-secondary btn-sm" @click="today()">Today</button>
-        <button class="btn btn-ghost btn-icon" @click="shift(-1)" aria-label="Previous"><?= icon('chevron-left', 'size-4') ?></button>
-        <button class="btn btn-ghost btn-icon" @click="shift(1)" aria-label="Next"><?= icon('chevron-right', 'size-4') ?></button>
+        <button class="btn btn-secondary btn-sm" @click="today()"><?= e(__('Today')) ?></button>
+        <button class="btn btn-ghost btn-icon" @click="shift(-1)" aria-label="<?= e(__('Previous')) ?>"><?= icon('chevron-left', 'size-4') ?></button>
+        <button class="btn btn-ghost btn-icon" @click="shift(1)" aria-label="<?= e(__('Next')) ?>"><?= icon('chevron-right', 'size-4') ?></button>
       </div>
       <h2 class="min-w-0 truncate text-sm font-semibold sm:text-base" x-text="title"></h2>
       <span class="hidden text-xs text-muted md:inline"><?= e($ws['timezone']) ?></span>
       <div class="ml-auto flex items-center gap-1">
-        <div class="flex rounded-lg bg-canvas p-0.5" role="tablist" aria-label="Calendar view">
-          <button class="tab" role="tab" :aria-selected="view==='week'" @click="setView('week')">Week</button>
-          <button class="tab" role="tab" :aria-selected="view==='month'" @click="setView('month')">Month</button>
-          <button class="tab" role="tab" :aria-selected="view==='list'" @click="setView('list')">List</button>
+        <div class="flex rounded-lg bg-canvas p-0.5" role="tablist" aria-label="<?= e(__('Calendar view')) ?>">
+          <button class="tab" role="tab" :aria-selected="view==='week'" @click="setView('week')"><?= e(__('Week')) ?></button>
+          <button class="tab" role="tab" :aria-selected="view==='month'" @click="setView('month')"><?= e(__('Month')) ?></button>
+          <button class="tab" role="tab" :aria-selected="view==='list'" @click="setView('list')"><?= e(__('List')) ?></button>
         </div>
-        <button class="btn btn-secondary btn-sm xl:hidden" @click="panel=true"><?= icon('layers', 'size-4') ?><span class="hidden sm:inline">Drafts</span> <span class="badge" x-text="drafts.length"></span></button>
+        <button class="btn btn-secondary btn-sm xl:hidden" @click="panel=true"><?= icon('layers', 'size-4') ?><span class="hidden sm:inline"><?= e(__('Drafts')) ?></span> <span class="badge" x-text="drafts.length"></span></button>
       </div>
     </div>
 
     <div class="relative flex-1 overflow-auto bg-panel scroll-thin" x-ref="scroller">
-      <div x-show="loading" class="absolute right-3 top-3 z-10 text-xs text-muted">Loading…</div>
+      <div x-show="loading" class="absolute right-3 top-3 z-10 text-xs text-muted"><?= e(__('Loading…')) ?></div>
 
       <!-- Week view -->
       <template x-if="view==='week'">
@@ -106,7 +122,7 @@ $head = '<script src="' . asset('js/calendar.js') . '"></script>';
                   <template x-for="ev in at(d.date, h)" :key="ev.id">
                     <button type="button" class="ev" :style="stVar(ev.status)" :draggable="canEdit && ev.movable" @dragstart="dragStart($event, ev)" @dragend="dragEnd()" @click="open(ev)" :class="dragging === ev.id ? 'is-dragging' : ''">
                       <span class="ev-tag"><span x-text="ev.statusLabel"></span><span x-text="ev.time"></span></span>
-                      <span class="ev-body"><span class="ev-avs" x-html="avatars(ev)"></span><span class="ev-text" x-text="ev.title"></span></span>
+                      <span class="ev-body"><span class="ev-avs" x-html="avatars(ev)"></span><span class="ev-text" x-text="ev.title"></span><span class="ev-dots" x-show="ev.labels && ev.labels.length" x-html="labelDots(ev)"></span></span>
                     </button>
                   </template>
                 </div>
@@ -129,10 +145,10 @@ $head = '<script src="' . asset('js/calendar.js') . '"></script>';
                 <div class="pointer-events-none flex items-center justify-between px-1 text-xs font-semibold" :class="d.isToday ? 'text-brand-strong dark:text-violet-300' : 'text-muted'"><span x-text="d.label"></span></div>
                 <template x-for="ev in (expanded[d.date] ? onDay(d.date) : onDay(d.date).slice(0, 3))" :key="ev.id">
                   <button type="button" class="ev" :style="stVar(ev.status)" :draggable="canEdit && ev.movable" @dragstart="dragStart($event, ev)" @dragend="dragEnd()" @click="open(ev)">
-                    <span class="ev-body"><span class="ev-avs" x-html="avatars(ev)"></span><span class="shrink-0 font-semibold" x-text="ev.time"></span><span class="ev-text" x-text="ev.title"></span></span>
+                    <span class="ev-body"><span class="ev-avs" x-html="avatars(ev)"></span><span class="shrink-0 font-semibold" x-text="ev.time"></span><span class="ev-text" x-text="ev.title"></span><span class="ev-dots" x-show="ev.labels && ev.labels.length" x-html="labelDots(ev)"></span></span>
                   </button>
                 </template>
-                <button type="button" class="text-left text-xs font-semibold text-brand-strong hover:underline dark:text-violet-300" x-show="onDay(d.date).length > 3 && !expanded[d.date]" @click="expanded[d.date]=true" x-text="'+' + (onDay(d.date).length - 3) + ' more'"></button>
+                <button type="button" class="text-left text-xs font-semibold text-brand-strong hover:underline dark:text-violet-300" x-show="onDay(d.date).length > 3 && !expanded[d.date]" @click="expanded[d.date]=true" x-text="np.t('+{n} more', {n: onDay(d.date).length - 3})"></button>
               </div>
             </template>
           </div>
@@ -161,9 +177,9 @@ $head = '<script src="' . asset('js/calendar.js') . '"></script>';
             </section>
           </template>
           <div x-show="!loading && !listDays.length" class="py-16 text-center">
-            <p class="font-semibold">Nothing planned this month</p>
-            <p class="mt-1 text-sm text-muted">Posts you schedule will appear here.</p>
-            <a x-show="canEdit" :href="cfg.newUrl" class="btn btn-primary mt-4"><?= icon('plus', 'size-4') ?> Create post</a>
+            <p class="font-semibold"><?= e(__('Nothing planned this month')) ?></p>
+            <p class="mt-1 text-sm text-muted"><?= e(__('Posts you schedule will appear here.')) ?></p>
+            <a x-show="canEdit" :href="cfg.newUrl" class="btn btn-primary mt-4"><?= icon('plus', 'size-4') ?> <?= e(__('Create post')) ?></a>
           </div>
         </div>
       </template>

@@ -45,9 +45,9 @@ final class DocumentInspector
             return self::inspectOoxml($path);
         }
         if (str_starts_with($head, "\xD0\xCF\x11\xE0")) {
-            throw new \InvalidArgumentException('Old .doc/.ppt files aren’t accepted because they can hide macros. Save it as PDF, PPTX or DOCX and upload again.');
+            throw new \InvalidArgumentException(__('Old .doc/.ppt files aren’t accepted because they can hide macros. Save it as PDF, PPTX or DOCX and upload again.'));
         }
-        throw new \InvalidArgumentException('Upload documents as PDF, PPTX or DOCX.');
+        throw new \InvalidArgumentException(__('Upload documents as PDF, PPTX or DOCX.'));
     }
 
     private static function inspectPdf(string $path): int
@@ -73,13 +73,13 @@ final class DocumentInspector
         // Names may be hex-escaped (/J#61vaScript) to dodge filters — normalise first.
         $norm = (string) preg_replace_callback('/#([0-9A-Fa-f]{2})/', static fn ($m) => chr((int) hexdec($m[1])), $scan);
         if (preg_match('#/(JavaScript|JS|Launch|EmbeddedFiles?|RichMedia|XFA)\b#', $norm, $m)) {
-            throw new \InvalidArgumentException('This PDF contains scripts, auto-actions or embedded files (' . $m[1] . '), which aren’t allowed. Export or print it to a fresh PDF and upload again.');
+            throw new \InvalidArgumentException(__('This PDF contains scripts, auto-actions or embedded files ({what}), which aren’t allowed. Export or print it to a fresh PDF and upload again.', ['what' => $m[1]]));
         }
         if (preg_match('#/Encrypt\b#', $norm)) {
-            throw new \InvalidArgumentException('This PDF is password-protected or encrypted. Save an unprotected copy and upload again.');
+            throw new \InvalidArgumentException(__('This PDF is password-protected or encrypted. Save an unprotected copy and upload again.'));
         }
         if (!preg_match('/%%EOF\s*$/', substr($data, -1024))) {
-            throw new \InvalidArgumentException('This PDF appears to be incomplete or damaged.');
+            throw new \InvalidArgumentException(__('This PDF appears to be incomplete or damaged.'));
         }
         $pages = preg_match_all('#/Type\s*/Page(?![a-zA-Z])#', $norm);
         if ($pages < 1) {
@@ -93,15 +93,15 @@ final class DocumentInspector
     private static function inspectOoxml(string $path): array
     {
         if (!class_exists(\ZipArchive::class)) {
-            throw new \InvalidArgumentException('The server can’t check Office files (PHP zip extension missing). Upload a PDF instead.');
+            throw new \InvalidArgumentException(__('The server can’t check Office files (PHP zip extension missing). Upload a PDF instead.'));
         }
         $zip = new \ZipArchive();
         if ($zip->open($path, \ZipArchive::RDONLY) !== true) {
-            throw new \InvalidArgumentException('This Office file appears to be damaged.');
+            throw new \InvalidArgumentException(__('This Office file appears to be damaged.'));
         }
         try {
             if ($zip->numFiles > self::MAX_ZIP_ENTRIES) {
-                throw new \InvalidArgumentException('This file has too many parts to be a normal document.');
+                throw new \InvalidArgumentException(__('This file has too many parts to be a normal document.'));
             }
             $total = 0;
             $names = [];
@@ -114,28 +114,28 @@ final class DocumentInspector
                 $names[] = $name;
                 $total += (int) $st['size'];
                 if ((int) $st['comp_size'] > 0 && (int) $st['size'] / (int) $st['comp_size'] > self::MAX_RATIO && (int) $st['size'] > 10 * 1024 * 1024) {
-                    throw new \InvalidArgumentException('This file is compressed suspiciously heavily and was refused.');
+                    throw new \InvalidArgumentException(__('This file is compressed suspiciously heavily and was refused.'));
                 }
                 if (preg_match('#(^|/)vbaProject\.bin$|(^|/)activeX/|(^|/)embeddings/.*\.(bin|exe|dll|js|vbs|bat|cmd|ps1|jar|hta)$#i', $name)) {
-                    throw new \InvalidArgumentException('This file contains macros or embedded programs, which aren’t allowed. Save it as PPTX/DOCX without macros, or as PDF.');
+                    throw new \InvalidArgumentException(__('This file contains macros or embedded programs, which aren’t allowed. Save it as PPTX/DOCX without macros, or as PDF.'));
                 }
             }
             if ($total > self::MAX_UNCOMPRESSED) {
-                throw new \InvalidArgumentException('This document expands to more than 300 MB and was refused.');
+                throw new \InvalidArgumentException(__('This document expands to more than 300 MB and was refused.'));
             }
             $ct = $zip->getFromName('[Content_Types].xml');
             if ($ct === false) {
-                throw new \InvalidArgumentException('Upload documents as PDF, PPTX or DOCX.');
+                throw new \InvalidArgumentException(__('Upload documents as PDF, PPTX or DOCX.'));
             }
             if (stripos($ct, 'macroEnabled') !== false || stripos($ct, 'vbaProject') !== false) {
-                throw new \InvalidArgumentException('Macro-enabled Office files (.pptm/.docm) aren’t allowed. Save as PPTX/DOCX or PDF.');
+                throw new \InvalidArgumentException(__('Macro-enabled Office files (.pptm/.docm) aren’t allowed. Save as PPTX/DOCX or PDF.'));
             }
             // External links (remote templates/images) can leak viewers' IPs or pull in remote content.
             foreach ($names as $name) {
                 if (str_ends_with($name, '.rels')) {
                     $rels = (string) $zip->getFromName($name);
                     if (preg_match('/TargetMode\s*=\s*"External"[^>]*Type="[^"]*(attachedTemplate|oleObject|frame|subDocument)"|Type="[^"]*(attachedTemplate|oleObject|frame|subDocument)"[^>]*TargetMode\s*=\s*"External"/i', $rels)) {
-                        throw new \InvalidArgumentException('This document loads content from an external address, which isn’t allowed. Save a self-contained copy.');
+                        throw new \InvalidArgumentException(__('This document loads content from an external address, which isn’t allowed. Save a self-contained copy.'));
                     }
                 }
             }
@@ -148,7 +148,7 @@ final class DocumentInspector
                 $pages = preg_match('#<Pages>(\d+)</Pages>#', $app, $m) ? (int) $m[1] : null;
                 return ['mime' => self::DOCX, 'ext' => 'docx', 'pages' => $pages];
             }
-            throw new \InvalidArgumentException('Upload documents as PDF, PPTX or DOCX.');
+            throw new \InvalidArgumentException(__('Upload documents as PDF, PPTX or DOCX.'));
         } finally {
             $zip->close();
         }

@@ -132,8 +132,8 @@ document.addEventListener('submit', function (e) { var b = e.target.querySelecto
 </head>
 <body class="hero-gradient min-h-full">
 <main class="mx-auto max-w-2xl px-4 py-10">
-  <div class="mb-6 flex items-center justify-center gap-2.5 text-white">
-    <img src="<?= $h($appBase) ?>/assets/img/logo.svg" alt="" class="size-9"><span class="text-xl font-bold">NextaPost installer</span>
+  <div class="mb-6 flex items-center justify-center gap-2 text-white">
+    <img src="<?= $h($appBase) ?>/assets/img/logo-dark.svg" alt="" class="h-8 w-auto"><span class="text-xl font-bold">NextaPost installer</span>
   </div>
   <div class="card p-6 sm:p-8">
 <?php if (!empty($already)): ?>

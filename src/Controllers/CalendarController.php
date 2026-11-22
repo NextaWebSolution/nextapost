@@ -19,6 +19,7 @@ final class CalendarController extends Controller
             'drafts' => (new PostService($this->db))->unscheduled($this->ws),
             'canEdit' => $this->can('edit'),
             'canChannels' => $this->can('channels'),
+            'labels' => array_map(static fn ($l) => ['id' => $l['uuid'], 'name' => $l['name'], 'color' => $l['color']], (new \App\Services\LibraryService($this->db))->labels((int) $this->ws['id'])),
         ]);
     }
 
@@ -29,10 +30,10 @@ final class CalendarController extends Controller
         $end = $this->req->str('end');
         $valid = static fn (string $d): bool => (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $d);
         if (!$valid($start) || !$valid($end) || $end <= $start) {
-            return $this->json(['error' => ['message' => 'Invalid date range.']], 422);
+            return $this->json(['error' => ['message' => __('Invalid date range.')]], 422);
         }
         if ((strtotime($end) - strtotime($start)) > 62 * 86400) {
-            return $this->json(['error' => ['message' => 'Range too large.']], 422);
+            return $this->json(['error' => ['message' => __('Range too large.')]], 422);
         }
         $svc = new PostService($this->db);
         return $this->json([

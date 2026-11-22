@@ -9,6 +9,11 @@ final class Router
     /** @var array<int, array{0:string,1:string,2:array}> */
     private array $routes = [];
 
+    /** @param bool $browser true = cookie session routes (CSRF + write rate limit); false = token-authenticated API routes */
+    public function __construct(private bool $browser = true)
+    {
+    }
+
     public function get(string $path, array $handler): void
     {
         $this->add('GET', $path, $handler);
@@ -22,6 +27,16 @@ final class Router
     public function patch(string $path, array $handler): void
     {
         $this->add('PATCH', $path, $handler);
+    }
+
+    public function put(string $path, array $handler): void
+    {
+        $this->add('PUT', $path, $handler);
+    }
+
+    public function delete(string $path, array $handler): void
+    {
+        $this->add('DELETE', $path, $handler);
     }
 
     private function add(string $method, string $path, array $handler): void
@@ -50,14 +65,14 @@ final class Router
                 $methodMismatch = true;
                 continue;
             }
-            if (!in_array($req->method, ['GET', 'HEAD'], true)) {
+            if ($this->browser && !in_array($req->method, ['GET', 'HEAD'], true)) {
                 if (!Csrf::check($req)) {
-                    throw new HttpException(419, 'Your session expired. Refresh the page and try again.');
+                    throw new HttpException(419, __('Your session expired. Refresh the page and try again.'));
                 }
                 // Abuse protection: cap state-changing requests per user (or IP when signed out).
                 $who = isset($_SESSION['uid']) ? 'u' . (int) $_SESSION['uid'] : 'ip' . $req->ip();
                 if (!RateLimiter::hit($app->db, 'write:' . $who, (int) Env::get('RATE_LIMIT_WRITES', 300), 300)) {
-                    throw new HttpException(429, 'You’re doing that too fast. Wait a few minutes and try again.');
+                    throw new HttpException(429, __('You’re doing that too fast. Wait a few minutes and try again.'));
                 }
             }
             $params = array_values(array_filter($m, 'is_string', ARRAY_FILTER_USE_KEY));
@@ -66,6 +81,6 @@ final class Router
             $result = $controller->$action(...$params);
             return $result instanceof Response ? $result : Response::html((string) $result);
         }
-        throw new HttpException($methodMismatch ? 405 : 404, $methodMismatch ? 'That action isn’t allowed here.' : 'We couldn’t find that page.');
+        throw new HttpException($methodMismatch ? 405 : 404, $methodMismatch ? __('That action isn’t allowed here.') : __('We couldn’t find that page.'));
     }
 }

@@ -32,7 +32,7 @@ abstract class Controller
         $u = Auth::user();
         if (!$u) {
             if ($this->req->wantsJson()) {
-                throw new HttpException(401, 'Your session ended. Sign in again.');
+                throw new HttpException(401, __('Your session ended. Sign in again.'));
             }
             if ($this->req->method === 'GET') {
                 $_SESSION['intended'] = $this->req->path;
@@ -46,7 +46,7 @@ abstract class Controller
     {
         $u = $this->user();
         if (!(int) $u['is_super_admin']) {
-            throw new HttpException(403, 'Only the system administrator can open this page.');
+            throw new HttpException(403, __('Only the system administrator can open this page.'));
         }
         return $u;
     }
@@ -60,7 +60,7 @@ abstract class Controller
             [$u['id'], $uuid]
         );
         if (!$ws) {
-            throw new HttpException(404, 'This workspace doesn’t exist or you’re not a member of it.');
+            throw new HttpException(404, __('This workspace doesn’t exist or you’re not a member of it.'));
         }
         $this->ws = $ws;
         $this->role = (string) $ws['role'];
@@ -71,7 +71,7 @@ abstract class Controller
     protected function authorize(string $ability): void
     {
         if (!$this->ws || !Gate::can($this->role, $ability, $this->ws)) {
-            throw new HttpException(403, 'Your role in this workspace doesn’t allow that. Ask a workspace admin.');
+            throw new HttpException(403, __('Your role in this workspace doesn’t allow that. Ask a workspace admin.'));
         }
     }
 

@@ -36,7 +36,7 @@ final class DiscordProvider extends AbstractProvider
     public function connect(array $input): array
     {
         $this->require($input, 'webhook_url');
-        $url = trim((string) $input['webhook_url']);
+        $url = trim(str_val($input['webhook_url']));
         $id = $this->checkUrl($url);
         $j = $this->ok($this->http('GET', $url), 'Discord didn’t accept that webhook. Check that it still exists.');
         return [

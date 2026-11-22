@@ -33,6 +33,98 @@ abstract class AbstractProvider implements ProviderInterface
         return null;
     }
 
+    public function options(array $meta = []): array
+    {
+        return [];
+    }
+
+    /** The content type to use when none was chosen (first declared). */
+    public function defaultType(): ?string
+    {
+        $types = $this->meta()['content_types'] ?? [];
+        return $types ? (string) array_key_first($types) : null;
+    }
+
+    /**
+     * Checks per-network options (poll, first comment, board, privacy...) and the media rules of a content type,
+     * driven by meta()['content_rules'] and options(). @return list<string> errors
+     */
+    public function validateOptions(?string $contentType, array $options, string $text, array $media = [], array $meta = [], bool $strict = true): array
+    {
+        $name = $this->meta()['name'];
+        $type = $contentType ?? $this->defaultType();
+        $errors = [];
+        $rule = $this->meta()['content_rules'][$type] ?? [];
+        $label = $type !== null ? (string) ($this->meta()['content_types'][$type] ?? $type) : '';
+        $kinds = array_column($media, 'type');
+        if (!$strict) {
+            $rule = [];
+        }
+        if (($rule['media'] ?? null) === 'none' && $media) {
+            $errors[] = __('A {name} {type} can’t include media.', ['name' => $name, 'type' => $label]);
+        }
+        if (in_array($rule['media'] ?? null, ['required', 'video', 'image'], true) && !$media) {
+            $errors[] = __('A {name} {type} needs {what}.', ['name' => $name, 'type' => $label, 'what' => ($rule['media'] === 'video' ? __('a video') : ($rule['media'] === 'image' ? __('an image') : __('an image or video')))]);
+        }
+        if (($rule['media'] ?? null) === 'video' && $media && array_diff($kinds, ['video'])) {
+            $errors[] = __('A {name} {type} must be a video.', ['name' => $name, 'type' => $label]);
+        }
+        if (($rule['media'] ?? null) === 'image' && $media && array_diff($kinds, ['image'])) {
+            $errors[] = __('A {name} {type} takes images only.', ['name' => $name, 'type' => $label]);
+        }
+        if (isset($rule['max_media']) && count($media) > $rule['max_media']) {
+            $errors[] = __('A {name} {type} can have up to {n} file(s).', ['name' => $name, 'type' => $label, 'n' => $rule['max_media']]);
+        }
+        if (isset($rule['min_media']) && $media && count($media) < $rule['min_media']) {
+            $errors[] = __('A {name} {type} needs at least {n} files.', ['name' => $name, 'type' => $label, 'n' => $rule['min_media']]);
+        }
+        foreach ($this->options($meta) as $f) {
+            if (!empty($f['types']) && !in_array($type, $f['types'], true)) {
+                continue;
+            }
+            $v = $options[$f['key']] ?? null;
+            $empty = $v === null || $v === '' || $v === [] || (is_array($v) && !array_filter($v, fn ($x) => trim((string) $x) !== ''));
+            if ($empty) {
+                if (!empty($f['required']) && $strict) {
+                    $errors[] = __('{name}: {field} is required.', ['name' => $name, 'field' => $f['label']]);
+                }
+                continue;
+            }
+            $bad = match ($f['type']) {
+                'text', 'textarea' => !is_string($v) || mb_strlen($v) > ($f['max'] ?? 5000),
+                'url' => !is_string($v) || !preg_match('#^https?://\S+$#i', $v) || mb_strlen($v) > 2000,
+                'select' => !is_string($v) || (empty($f['dynamic']) && !isset($f['choices'][$v])),
+                'checkbox' => !is_bool($v) && !in_array($v, [0, 1, '0', '1'], true),
+                'number' => !is_numeric($v) || (isset($f['min']) && $v < $f['min']) || (isset($f['max']) && $v > $f['max']),
+                'datetime' => !is_string($v) || to_utc($v, 'UTC') === null,
+                'list' => !is_array($v) || count(array_filter($v, fn ($x) => trim((string) $x) !== '')) < ($f['min'] ?? 0)
+                    || count($v) > ($f['max'] ?? 10) || (bool) array_filter($v, fn ($x) => !is_scalar($x) || mb_strlen((string) $x) > ($f['item_max'] ?? 200)),
+                default => false,
+            };
+            if ($bad) {
+                $errors[] = match ($f['type']) {
+                    'list' => __('{name}: {field} needs {min} to {max} entries of up to {len} characters.', ['name' => $name, 'field' => $f['label'], 'min' => $f['min'] ?? 0, 'max' => $f['max'] ?? 10, 'len' => $f['item_max'] ?? 200]),
+                    'url' => __('{name}: {field} must be a full link starting with https://.', ['name' => $name, 'field' => $f['label']]),
+                    'text', 'textarea' => __('{name}: {field} can be up to {n} characters.', ['name' => $name, 'field' => $f['label'], 'n' => $f['max'] ?? 5000]),
+                    default => __('{name}: choose a valid {field}.', ['name' => $name, 'field' => mb_strtolower($f['label'])]),
+                };
+            }
+        }
+        return $errors;
+    }
+
+    /** Option value with the field's default. */
+    protected function opt(array $context, string $key, mixed $default = null): mixed
+    {
+        $v = $context['options'][$key] ?? null;
+        return $v === null || $v === '' ? $default : $v;
+    }
+
+    protected function type(array $context): ?string
+    {
+        return $context['content_type'] ?? $this->defaultType();
+    }
+
     public function validate(string $text, array $media, array $meta = []): array
     {
         $l = $this->limits($meta);
@@ -110,7 +202,7 @@ abstract class AbstractProvider implements ProviderInterface
     protected function require(array $input, string ...$keys): void
     {
         foreach ($keys as $k) {
-            if (trim((string) ($input[$k] ?? '')) === '') {
+            if (trim(str_val($input[$k] ?? '')) === '') {
                 throw new ProviderException('Please fill in all required fields.');
             }
         }

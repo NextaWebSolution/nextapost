@@ -30,22 +30,30 @@ final class AccountController extends Controller
         $email = mb_strtolower($this->req->str('email'));
         $tz = $this->req->str('timezone');
         if ($name === '' || mb_strlen($name) > 120) {
-            return $this->back(url('/account'), ['error' => 'Enter your name.']);
+            return $this->back(url('/account'), ['error' => __('Enter your name.')]);
         }
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return $this->back(url('/account'), ['error' => 'Enter a valid email address.']);
+            return $this->back(url('/account'), ['error' => __('Enter a valid email address.')]);
         }
         if ($email !== $u['email'] && $this->db->value('SELECT 1 FROM users WHERE email = ? AND id <> ?', [$email, $u['id']])) {
-            return $this->back(url('/account'), ['error' => 'Another account already uses that email.']);
+            return $this->back(url('/account'), ['error' => __('Another account already uses that email.')]);
         }
         if (!valid_timezone($tz)) {
             $tz = (string) $u['timezone'];
         }
         $data = ['name' => $name, 'email' => $email, 'timezone' => $tz, 'updated_at' => now_utc()];
-        $newPw = (string) $this->req->input('new_password', '');
+        $locale = $this->req->str('locale');
+        if ($locale !== '' && isset(\App\Core\Lang::LOCALES[$locale])) {
+            $data['locale'] = $locale;
+        }
+        if ($this->req->input('notify_form')) {
+            $on = $this->req->arr('notify');
+            $data['notify_json'] = json_encode(array_map(static fn ($k) => isset($on[$k]), array_combine(array_keys(\App\Services\Notifier::KINDS), array_keys(\App\Services\Notifier::KINDS))));
+        }
+        $newPw = $this->req->raw('new_password');
         if ($newPw !== '' || $email !== $u['email']) {
-            if (!password_verify((string) $this->req->input('current_password', ''), (string) $u['password_hash'])) {
-                return $this->back(url('/account'), ['error' => 'Enter your current password to change your email or password.']);
+            if (!password_verify($this->req->raw('current_password'), (string) $u['password_hash'])) {
+                return $this->back(url('/account'), ['error' => __('Enter your current password to change your email or password.')]);
             }
         }
         if ($newPw !== '') {
@@ -61,7 +69,7 @@ final class AccountController extends Controller
         if (isset($data['password_hash'])) {
             Auth::login((array) $this->db->one('SELECT * FROM users WHERE id = ?', [$u['id']]));
         }
-        return $this->back(url('/account'), ['success' => 'Your account was updated.']);
+        return $this->back(url('/account'), ['success' => __('Your account was updated.')]);
     }
 
     public function theme(): Response
@@ -69,7 +77,7 @@ final class AccountController extends Controller
         $u = $this->user();
         $theme = $this->req->str('theme');
         if (!in_array($theme, ['light', 'dark', 'system'], true)) {
-            return $this->json(['error' => ['message' => 'Unknown theme.']], 422);
+            return $this->json(['error' => ['message' => __('Unknown theme.')]], 422);
         }
         $this->db->update('users', ['theme' => $theme], 'id = ?', [$u['id']]);
         return $this->json(['ok' => true]);

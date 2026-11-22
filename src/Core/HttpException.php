@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Core;
 
-final class HttpException extends \RuntimeException
+class HttpException extends \RuntimeException
 {
-    public function __construct(public int $status, string $message = '')
+    /** @param array<string, string> $headers extra response headers (e.g. WWW-Authenticate) */
+    public function __construct(public int $status, string $message = '', public ?string $errorCode = null, public array $headers = [])
     {
         parent::__construct($message, $status);
     }

@@ -44,8 +44,8 @@ final class TelegramProvider extends AbstractProvider
     public function connect(array $input): array
     {
         $this->require($input, 'bot_token', 'chat_id');
-        $token = trim((string) $input['bot_token']);
-        $chatId = trim((string) $input['chat_id']);
+        $token = trim(str_val($input['bot_token']));
+        $chatId = trim(str_val($input['chat_id']));
         $bot = $this->api($token, 'getMe', ['json' => (object) []]);
         $chat = $this->api($token, 'getChat', ['json' => ['chat_id' => $chatId]]);
         $username = $chat['username'] ?? null;

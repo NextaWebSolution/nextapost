@@ -7,8 +7,12 @@ document.addEventListener('alpine:init', () => {
   const ymd = (dt) => dt.getUTCFullYear() + '-' + pad(dt.getUTCMonth() + 1) + '-' + pad(dt.getUTCDate());
   const addDays = (s, n) => { const d = toDate(s); d.setUTCDate(d.getUTCDate() + n); return ymd(d); };
   const weekStart = (s) => { const d = toDate(s); const dow = (d.getUTCDay() + 6) % 7; return addDays(s, -dow); };
-  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // Month and weekday names in the interface language (falls back to English).
+  const LOC = document.documentElement.lang || 'en';
+  const names = (opts, n, mk) => { try { const f = new Intl.DateTimeFormat(LOC, Object.assign({ timeZone: 'UTC' }, opts)); return Array.from({ length: n }, (_, i) => f.format(mk(i))); } catch (e) { return null; } };
+  const MONTHS = names({ month: 'long' }, 12, (i) => new Date(Date.UTC(2024, i, 1))) || ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const MON = names({ month: 'short' }, 12, (i) => new Date(Date.UTC(2024, i, 1))) || MONTHS.map((m) => m.slice(0, 3));
+  const DOW = names({ weekday: 'short' }, 7, (i) => new Date(Date.UTC(2024, 0, 7 + i))) || ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const COLORS = { draft: 'gray', cancelled: 'gray', in_review: 'amber', scheduled: 'violet', publishing: 'sky', published: 'green', partially_published: 'teal', failed: 'red' };
 
   Alpine.data('calendarPage', (cfg) => ({
@@ -29,6 +33,7 @@ document.addEventListener('alpine:init', () => {
     nowStr: cfg.now,
     offset: 0,
     hours: Array.from({ length: 24 }, (_, i) => i),
+    labelFilter: [],
 
     init() {
       // Keep "now" ticking relative to the server's clock in the workspace time zone.
@@ -39,6 +44,8 @@ document.addEventListener('alpine:init', () => {
       let saved = null;
       try { saved = localStorage.getItem('np.calview'); } catch (e) {}
       this.view = window.innerWidth < 768 ? 'list' : (['week', 'month', 'list'].includes(saved) ? saved : 'week');
+      try { this.labelFilter = JSON.parse(localStorage.getItem('np.calLabels.' + cfg.ws) || '[]').filter((id) => (cfg.labels || []).some((l) => l.id === id)); } catch (e) { this.labelFilter = []; }
+      this.$watch('labelFilter', (v) => { try { localStorage.setItem('np.calLabels.' + cfg.ws, JSON.stringify(v)); } catch (e) {} this.index(); });
       this.load().then(() => this.scrollToMorning());
     },
     tick() {
@@ -62,14 +69,14 @@ document.addEventListener('alpine:init', () => {
       const month = this.anchor.slice(0, 7);
       for (let d = s; d < e; d = addDays(d, 1)) {
         const dt = toDate(d);
-        out.push({ date: d, dow: DOW[dt.getUTCDay()], label: this.view === 'week' ? dt.getUTCDate() + ' ' + MONTHS[dt.getUTCMonth()].slice(0, 3) : String(dt.getUTCDate()), isToday: d === this.nowDate, inMonth: d.slice(0, 7) === month });
+        out.push({ date: d, dow: DOW[dt.getUTCDay()], label: this.view === 'week' ? dt.getUTCDate() + ' ' + MON[dt.getUTCMonth()] : String(dt.getUTCDate()), isToday: d === this.nowDate, inMonth: d.slice(0, 7) === month });
       }
       return out;
     },
     get listDays() {
       return Object.keys(this.byDay).sort().map((date) => {
         const dt = toDate(date);
-        return { date, isToday: date === this.nowDate, long: DOW[dt.getUTCDay()] + ', ' + dt.getUTCDate() + ' ' + MONTHS[dt.getUTCMonth()] + (date === this.nowDate ? ' · Today' : '') };
+        return { date, isToday: date === this.nowDate, long: DOW[dt.getUTCDay()] + ', ' + dt.getUTCDate() + ' ' + MONTHS[dt.getUTCMonth()] + (date === this.nowDate ? ' · ' + np.t('Today') : '') };
       });
     },
     get title() {
@@ -77,7 +84,7 @@ document.addEventListener('alpine:init', () => {
       if (this.view === 'week') {
         const a = toDate(s), b = toDate(addDays(e, -1));
         const same = a.getUTCMonth() === b.getUTCMonth();
-        return a.getUTCDate() + (same ? '' : ' ' + MONTHS[a.getUTCMonth()].slice(0, 3)) + ' – ' + b.getUTCDate() + ' ' + MONTHS[b.getUTCMonth()].slice(0, 3) + ' ' + b.getUTCFullYear();
+        return a.getUTCDate() + (same ? '' : ' ' + MON[a.getUTCMonth()]) + ' – ' + b.getUTCDate() + ' ' + MON[b.getUTCMonth()] + ' ' + b.getUTCFullYear();
       }
       const a = toDate(this.anchor);
       return MONTHS[a.getUTCMonth()] + ' ' + a.getUTCFullYear();
@@ -93,15 +100,17 @@ document.addEventListener('alpine:init', () => {
         if (data.now) { this.nowStr = data.now; }
         this.index();
       } catch (e) {
-        np.toast(e.message || 'Could not load the calendar.', 'error');
+        np.toast(e.message || np.t('Could not load the calendar.'), 'error');
       } finally {
         this.loading = false;
       }
     },
     index() {
       const byDay = {}, byHour = {};
+      const want = this.labelFilter;
       for (const ev of this.events) {
         if (!ev.date) continue;
+        if (want.length && !(ev.labels || []).some((l) => want.includes(l.uuid))) continue;
         (byDay[ev.date] = byDay[ev.date] || []).push(ev);
         const k = ev.date + '|' + (+ev.time.slice(0, 2));
         (byHour[k] = byHour[k] || []).push(ev);
@@ -110,6 +119,8 @@ document.addEventListener('alpine:init', () => {
       this.byDay = byDay; this.byHour = byHour;
     },
     onDay(date) { return this.byDay[date] || []; },
+    toggleLabelFilter(id) { this.labelFilter = this.labelFilter.includes(id) ? this.labelFilter.filter((x) => x !== id) : [...this.labelFilter, id]; },
+    labelDots(ev) { return (ev.labels || []).slice(0, 3).map((l) => '<span class="ev-dot" style="background:' + np.esc(l.color) + '" title="' + np.esc(l.name) + '"></span>').join(''); },
     at(date, h) { return this.byHour[date + '|' + h] || []; },
 
     setView(v) { this.view = v; this.expanded = {}; try { localStorage.setItem('np.calview', v); } catch (e) {} this.load().then(() => this.scrollToMorning()); },
@@ -136,7 +147,7 @@ document.addEventListener('alpine:init', () => {
       });
     },
 
-    hourLabel(h) { return (h % 12 || 12) + (h < 12 ? ' am' : ' pm'); },
+    hourLabel(h) { try { return new Intl.DateTimeFormat(LOC, { hour: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, 1, h))); } catch (e) { return (h % 12 || 12) + (h < 12 ? ' am' : ' pm'); } },
     isPastSlot(date, h) { return date < this.nowDate || (date === this.nowDate && h < this.nowHour); },
     stVar(status) { return '--st: var(--c-' + (COLORS[status] || 'gray') + ')'; },
     avatars(ev, size) { return (ev.channels || []).slice(0, 4).map((c) => np.avatar(c, size || 18)).join('') + (ev.channels.length > 4 ? '<span class="ml-1 text-[10px] text-muted">+' + (ev.channels.length - 4) + '</span>' : ''); },
@@ -145,7 +156,7 @@ document.addEventListener('alpine:init', () => {
       if (!this.canEdit) return;
       let time = h === null ? '10:00' : pad(h) + ':00';
       if (date + ' ' + time < this.nowStr) {
-        if (date < this.nowDate) { np.toast('That day is in the past. Pick a future slot.', 'error'); return; }
+        if (date < this.nowDate) { np.toast(np.t('That day is in the past. Pick a future slot.'), 'error'); return; }
         const n = new Date(Date.now() + this.offset + 3600000);
         time = pad(n.getUTCHours()) + ':00';
       }
@@ -170,7 +181,7 @@ document.addEventListener('alpine:init', () => {
       const time = h === null ? (ev.time || '10:00') : pad(h) + ':' + minutes;
       const at = date + 'T' + time;
       if (ev.date === date && ev.time === time) return;
-      if (ev.status !== 'draft' && date + ' ' + time < this.nowStr) { np.toast('You can’t move a post into the past.', 'error'); return; }
+      if (ev.status !== 'draft' && date + ' ' + time < this.nowStr) { np.toast(np.t('You can’t move a post into the past.'), 'error'); return; }
       const before = { date: ev.date, time: ev.time };
       ev.date = date; ev.time = time;
       if (d.fromDraft) { this.drafts = this.drafts.filter((x) => x.id !== ev.id); this.events.push(ev); }
@@ -178,10 +189,10 @@ document.addEventListener('alpine:init', () => {
       try {
         const res = await np.api(cfg.moveUrl.replace('__ID__', ev.id), { method: 'PATCH', body: { at, version: ev.version } });
         ev.version = res.version;
-        np.toast(res.message || 'Moved.');
+        np.toast(res.message || np.t('Moved.'));
       } catch (e) {
         ev.date = before.date; ev.time = before.time;
-        np.toast(e.message || 'Could not move the post.', 'error');
+        np.toast(e.message || np.t('Could not move the post.'), 'error');
         this.load();
         return;
       }

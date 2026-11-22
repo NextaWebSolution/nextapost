@@ -11,6 +11,7 @@ use App\Core\Response;
 use App\Core\Session;
 use App\Providers\ProviderException;
 use App\Providers\ProviderFactory;
+use App\Services\ScheduleService;
 
 final class ChannelController extends Controller
 {
@@ -21,6 +22,12 @@ final class ChannelController extends Controller
         'x' => ['https://x.com/logout', 'Sign out of X'],
         'facebook' => ['https://www.facebook.com/', 'Open Facebook to log out'],
         'instagram' => ['https://www.facebook.com/', 'Open Facebook to log out'],
+        'instagram_direct' => ['https://www.instagram.com/accounts/logout/', 'Sign out of Instagram'],
+        'threads' => ['https://www.threads.net/', 'Open Threads to log out'],
+        'tiktok' => ['https://www.tiktok.com/logout', 'Sign out of TikTok'],
+        'youtube' => ['https://accounts.google.com/Logout', 'Sign out of Google'],
+        'google_business' => ['https://accounts.google.com/Logout', 'Sign out of Google'],
+        'pinterest' => ['https://www.pinterest.com/logout/', 'Sign out of Pinterest'],
     ];
 
     public function index(string $ws): Response
@@ -32,10 +39,46 @@ final class ChannelController extends Controller
             $m = $p->meta();
             $networks[$key] = $m + ['configured' => $m['kind'] !== 'oauth' || ProviderFactory::appConfig($key) !== []];
         }
+        $schedules = [];
+        foreach ($channels as $c) {
+            $schedules[$c['uuid']] = ['name' => $c['name'], 'network' => $c['network'], 'tz' => $c['timezone'] ?? '', 'goal' => (int) ($c['posting_goal'] ?? 0) ?: null,
+                'schedule' => ScheduleService::decode($c['posting_schedule'] ?? null)];
+        }
         return $this->view('channels/index', [
             'title' => 'Channels', 'channels' => $channels, 'networks' => $networks, 'canManage' => $this->can('channels'),
+            'canSchedule' => $this->can('library'),
             'httpsOk' => str_starts_with((string) Env::get('APP_URL', ''), 'https://'),
+            'scheduleCfg' => ['channels' => $schedules, 'base' => $this->wsUrl('channels'), 'timezones' => \DateTimeZone::listIdentifiers(),
+                'days' => array_map(static fn ($d) => ['key' => $d, 'label' => weekday_name($d)], ScheduleService::DAYS)],
         ]);
+    }
+
+    /** Save a channel's weekly posting times (or generate suggestions for a weekly goal). */
+    public function schedule(string $ws, string $id): Response
+    {
+        $this->workspace($ws);
+        $this->authorize('library');
+        $ch = $this->db->one('SELECT * FROM channels WHERE workspace_id = ? AND uuid = ?', [$this->ws['id'], $id]) ?? throw new HttpException(404, __('That channel no longer exists.'));
+        $goal = (int) $this->req->input('goal', 0);
+        $goal = $goal > 0 ? min(ScheduleService::MAX_GOAL, $goal) : null;
+        if ($this->req->input('generate')) {
+            return $this->json(['schedule' => ScheduleService::generate((string) $ch['network'], $goal ?? 5)]);
+        }
+        [$sched, $err] = ScheduleService::validate($this->req->input('schedule', []));
+        if ($err) {
+            return $this->json(['error' => ['message' => $err]], 422);
+        }
+        $tz = trim($this->req->str('timezone'));
+        if ($tz !== '' && !in_array($tz, \DateTimeZone::listIdentifiers(), true)) {
+            return $this->json(['error' => ['message' => __('Pick a valid time zone.')]], 422);
+        }
+        $svc = new ScheduleService($this->db);
+        $svc->save($ch, $sched, $tz ?: null, $goal);
+        $ch = $this->db->one('SELECT * FROM channels WHERE id = ?', [$ch['id']]);
+        $tzName = $svc->timezone($ch, $this->ws);
+        $slots = array_map(static fn ($u) => to_local($u, $tzName, 'D d M H:i'), $svc->freeSlots($ch, $this->ws, 5));
+        log_activity((int) $this->ws['id'], 'channel.schedule', __('Posting times updated: {name}', ['name' => (string) $ch['name']]), 'channel', (int) $ch['id']);
+        return $this->json(['schedule' => $sched, 'slots' => $slots]);
     }
 
     public function connectForm(string $ws, string $network): Response
@@ -43,7 +86,7 @@ final class ChannelController extends Controller
         $this->workspace($ws);
         $this->authorize('channels');
         if (!ProviderFactory::has($network)) {
-            throw new HttpException(404, 'Unknown network.');
+            throw new HttpException(404, __('Unknown network.'));
         }
         $p = ProviderFactory::make($network);
         $meta = $p->meta();
@@ -85,11 +128,11 @@ final class ChannelController extends Controller
         $this->workspace($ws);
         $this->authorize('channels');
         if (!ProviderFactory::has($network) || ProviderFactory::make($network)->meta()['kind'] !== 'token') {
-            throw new HttpException(404, 'Unknown network.');
+            throw new HttpException(404, __('Unknown network.'));
         }
         $p = ProviderFactory::make($network);
         if (!\App\Core\RateLimiter::hit($this->db, 'connect:' . $this->user()['id'], 20, 600)) {
-            return $this->back($this->wsUrl('channels/connect/' . $network), ['error' => 'Too many connection attempts. Wait 10 minutes and try again.']);
+            return $this->back($this->wsUrl('channels/connect/' . $network), ['error' => __('Too many connection attempts. Wait 10 minutes and try again.')]);
         }
         $input = [];
         foreach ($p->fields() as $f) {
@@ -102,7 +145,7 @@ final class ChannelController extends Controller
             return $this->back($this->wsUrl('channels/connect/' . $network), ['error' => $e->getMessage()]);
         }
         $name = $this->saveAccount($network, $account);
-        Session::flash('success', $name . ' is connected.');
+        Session::flash('success', __('{name} is connected.', ['name' => $name]));
         return $this->redirect($this->wsUrl('channels'));
     }
 
@@ -136,7 +179,7 @@ final class ChannelController extends Controller
         $pending = $_SESSION['oauth'][$state] ?? null;
         unset($_SESSION['oauth'][$state]);
         if (!$pending || time() - (int) $pending['at'] > 900) {
-            Session::flash('error', 'The sign-in took too long or was opened in another browser. Please try connecting again.');
+            Session::flash('error', __('The sign-in took too long or was opened in another browser. Please try connecting again.'));
             return $this->redirect(url('/'));
         }
         $this->workspace((string) $pending['ws']);
@@ -165,7 +208,7 @@ final class ChannelController extends Controller
         $pick = $_SESSION['oauth_pick'] ?? null;
         unset($_SESSION['oauth_pick']);
         if (!$pick || $pick['key'] !== $this->req->str('key') || $pick['ws'] !== $this->ws['uuid'] || time() - (int) $pick['at'] > 900) {
-            return $this->back($this->wsUrl('channels'), ['error' => 'That selection expired. Please connect again.']);
+            return $this->back($this->wsUrl('channels'), ['error' => __('That selection expired. Please connect again.')]);
         }
         $chosen = array_map('strval', $this->req->arr('accounts'));
         $n = 0;
@@ -175,7 +218,7 @@ final class ChannelController extends Controller
                 $n++;
             }
         }
-        return $this->back($this->wsUrl('channels'), $n ? ['success' => $n === 1 ? '1 account connected.' : "$n accounts connected."] : ['error' => 'No accounts were selected.']);
+        return $this->back($this->wsUrl('channels'), $n ? ['success' => $n === 1 ? '1 account connected.' : "$n accounts connected."] : ['error' => __('No accounts were selected.')]);
     }
 
     public function delete(string $ws, string $id): Response
@@ -184,7 +227,7 @@ final class ChannelController extends Controller
         $this->authorize('channels');
         $ch = $this->db->one('SELECT * FROM channels WHERE workspace_id = ? AND uuid = ?', [$this->ws['id'], $id]);
         if (!$ch) {
-            throw new HttpException(404, 'Channel not found.');
+            throw new HttpException(404, __('Channel not found.'));
         }
         $pending = (int) $this->db->value("SELECT COUNT(*) FROM post_targets WHERE channel_id = ? AND status IN ('pending','queued','publishing')", [$ch['id']]);
         if ($pending > 0 && $this->req->str('confirm') !== 'yes') {

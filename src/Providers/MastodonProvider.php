@@ -11,7 +11,10 @@ final class MastodonProvider extends AbstractProvider
     public function meta(): array
     {
         return ['name' => 'Mastodon', 'color' => '#6364FF', 'letter' => 'M', 'kind' => 'token',
-            'description' => 'Post to any Mastodon server with an access token.'];
+            'description' => 'Post to any Mastodon server with an access token.',
+            'content_types' => ['post' => __('Post'), 'poll' => __('Poll')],
+            'content_rules' => ['poll' => ['media' => 'none']],
+        ];
     }
 
     public function fields(): array
@@ -20,6 +23,22 @@ final class MastodonProvider extends AbstractProvider
             ['name' => 'instance_url', 'label' => 'Server address', 'type' => 'url', 'placeholder' => 'https://mastodon.social', 'help' => 'The server your account lives on.'],
             ['name' => 'access_token', 'label' => 'Access token', 'type' => 'password', 'placeholder' => '', 'help' => 'Preferences → Development → New application (scopes: read:accounts, write:statuses, write:media) → copy “Your access token”.'],
         ];
+    }
+
+    public function options(array $meta = []): array
+    {
+        return [
+            ['key' => 'poll', 'label' => __('Poll choices'), 'type' => 'list', 'types' => ['poll'], 'required' => true, 'min' => 2, 'max' => 4, 'item_max' => 50, 'placeholder' => __('Choice')],
+            ['key' => 'poll_seconds', 'label' => __('Poll length'), 'type' => 'select', 'types' => ['poll'], 'required' => true, 'default' => '86400',
+                'choices' => ['3600' => __('1 hour'), '21600' => __('6 hours'), '86400' => __('1 day'), '259200' => __('3 days'), '604800' => __('7 days')]],
+            ['key' => 'poll_multiple', 'label' => __('Allow several choices'), 'type' => 'checkbox', 'types' => ['poll'], 'default' => false],
+        ];
+    }
+
+    public function metrics(array $credentials, string $externalId, array $meta = []): ?array
+    {
+        $j = $this->ok($this->http('GET', rtrim((string) $credentials['instance_url'], '/') . '/api/v1/statuses/' . rawurlencode($externalId), ['headers' => ['Authorization: Bearer ' . $credentials['access_token']], 'public_only' => true]));
+        return ['likes' => (int) ($j['favourites_count'] ?? 0), 'comments' => (int) ($j['replies_count'] ?? 0), 'shares' => (int) ($j['reblogs_count'] ?? 0)];
     }
 
     public function limits(array $meta = []): array
@@ -40,12 +59,12 @@ final class MastodonProvider extends AbstractProvider
     public function connect(array $input): array
     {
         $this->require($input, 'instance_url', 'access_token');
-        $base = self::base((string) $input['instance_url']);
+        $base = self::base(str_val($input['instance_url']));
         if (!str_starts_with($base, 'https://')) {
             throw new ProviderException('Use the https:// address of your Mastodon server.');
         }
         Http::assertPublicUrl($base);
-        $token = trim((string) $input['access_token']);
+        $token = trim(str_val($input['access_token']));
         $auth = ['Authorization: Bearer ' . $token];
         $acct = $this->ok($this->http('GET', $base . '/api/v1/accounts/verify_credentials', ['headers' => $auth, 'public_only' => true]), 'That token was rejected. Check the server address and token.');
         $max = 500;
@@ -70,7 +89,7 @@ final class MastodonProvider extends AbstractProvider
         $base = (string) $credentials['instance_url'];
         $auth = ['Authorization: Bearer ' . $credentials['access_token']];
         $ids = [];
-        foreach ($media as $m) {
+        foreach ($this->type($context) === 'poll' ? [] : $media as $m) {
             $parts = ['file' => new \CURLFile($m['path'], $m['mime'], basename($m['path']))];
             if (!empty($m['alt'])) {
                 $parts['description'] = mb_substr((string) $m['alt'], 0, 1500);
@@ -95,6 +114,14 @@ final class MastodonProvider extends AbstractProvider
         $body = ['status' => $text, 'visibility' => 'public'];
         if ($ids) {
             $body['media_ids'] = $ids;
+        }
+        if ($this->type($context) === 'poll') {
+            unset($body['media_ids']);
+            $body['poll'] = [
+                'options' => array_slice(array_values(array_filter(array_map('trim', (array) $this->opt($context, 'poll', [])), 'strlen')), 0, 4),
+                'expires_in' => (int) $this->opt($context, 'poll_seconds', 86400),
+                'multiple' => filter_var($this->opt($context, 'poll_multiple', false), FILTER_VALIDATE_BOOL),
+            ];
         }
         $j = $this->ok($this->http('POST', $base . '/api/v1/statuses', ['headers' => $headers, 'json' => $body, 'public_only' => true]));
         return new PublishResult((string) $j['id'], $j['url'] ?? null);

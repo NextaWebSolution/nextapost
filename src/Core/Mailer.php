@@ -19,6 +19,9 @@ final class Mailer
         ];
     }
 
+    /** @var null|callable(string,string,string):void  Test hook: captures mail instead of sending. */
+    public static $fake = null;
+
     public static function send(string $to, string $subject, string $html, ?string $text = null): void
     {
         $c = self::config();
@@ -27,6 +30,10 @@ final class Mailer
             throw new \InvalidArgumentException('Invalid recipient address.');
         }
         $subject = trim(str_replace(["\r", "\n"], ' ', $subject));
+        if (self::$fake !== null) {
+            (self::$fake)($to, $subject, $html);
+            return;
+        }
         $text ??= trim(html_entity_decode(strip_tags((string) preg_replace('#<br\s*/?>|</p>|</h\d>#i', "\n", $html)), ENT_QUOTES, 'UTF-8'));
         $fromEmail = $c['from_email'] ?: ('no-reply@' . (parse_url((string) Env::get('APP_URL', 'http://localhost'), PHP_URL_HOST) ?: 'localhost'));
         $fromName = str_replace(['"', "\r", "\n"], '', (string) ($c['from_name'] ?: app_name()));

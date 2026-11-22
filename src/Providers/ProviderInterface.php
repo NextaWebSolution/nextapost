@@ -41,5 +41,18 @@ interface ProviderInterface
     /** @return string[] human readable problems (empty = OK) */
     public function validate(string $text, array $media, array $meta = []): array;
 
+    /**
+     * Extra fields the composer shows for this channel (title, privacy, board, poll…).
+     * Field: ['key','label','type'=>text|textarea|select|checkbox|url|list|number|datetime,'types'=>?string[] content types it applies to,
+     *         'required'=>bool,'max'=>int,'min'=>int,'choices'=>[value=>label],'help'=>string,'default'=>mixed,'dynamic'=>bool]
+     */
+    public function options(array $meta = []): array;
+
+    /**
+     * @param bool $strict false for drafts: only check the format of what was filled in, not required fields or media rules
+     * @return list<string> errors for per-network options (media items as in validate())
+     */
+    public function validateOptions(?string $contentType, array $options, string $text, array $media = [], array $meta = [], bool $strict = true): array;
+
     public function publish(array $credentials, string $text, array $media, array $meta = [], array $context = []): PublishResult;
 }

@@ -43,22 +43,31 @@ final class SystemController extends Controller
                 'redirect' => abs_url('oauth/' . $key . '/callback'),
             ];
         }
+        $mediaApps = [];
+        foreach (\App\Services\MediaSourceService::APPS as $key => $def) {
+            $mediaApps[$key] = $def + [
+                'client_id' => (string) ($integrations[$key]['client_id'] ?? ''),
+                'has_secret' => !empty($integrations[$key]['client_secret_enc']),
+                'secret_value' => !empty($def['secret_visible']) ? (string) (\App\Services\MediaSourceService::setting($key)['client_secret'] ?? '') : '',
+                'redirect' => $key === 'unsplash' ? null : \App\Services\MediaSourceService::redirectUri($key === 'canva' ? 'canva' : 'google'),
+            ];
+        }
         $mail = Mailer::config();
         $hb = Settings::get('cron_heartbeat') ?? [];
         $stats = (new Queue($this->db))->stats();
         $checks = [
-            ['PHP version ' . PHP_VERSION, version_compare(PHP_VERSION, '8.1.0', '>=')],
-            ['Extensions: pdo_mysql, curl, mbstring, sodium, fileinfo, gd, zip', extension_loaded('pdo_mysql') && extension_loaded('curl') && extension_loaded('mbstring') && extension_loaded('sodium') && extension_loaded('fileinfo') && extension_loaded('gd') && extension_loaded('zip')],
-            ['HTTPS site address (needed by Instagram/Facebook to fetch media)', str_starts_with((string) Env::get('APP_URL', ''), 'https://')],
-            ['storage/ is writable', is_writable(APP_ROOT . '/storage')],
-            ['public/media/ is writable', is_writable(APP_ROOT . '/public/media')],
-            ['Cron job ran in the last 5 minutes', !empty($hb['at']) && $hb['at'] > now_utc(-300)],
-            ['Installer locked', is_file(APP_ROOT . '/storage/installed.lock')],
-            ['Debug mode is off', !Env::get('APP_DEBUG')],
+            [__('PHP version {v}', ['v' => PHP_VERSION]), version_compare(PHP_VERSION, '8.1.0', '>=')],
+            [__('Extensions: {list}', ['list' => 'pdo_mysql, curl, mbstring, sodium, fileinfo, gd, zip']), extension_loaded('pdo_mysql') && extension_loaded('curl') && extension_loaded('mbstring') && extension_loaded('sodium') && extension_loaded('fileinfo') && extension_loaded('gd') && extension_loaded('zip')],
+            [__('HTTPS site address (needed by Instagram/Facebook to fetch media)'), str_starts_with((string) Env::get('APP_URL', ''), 'https://')],
+            [__('{dir} is writable', ['dir' => 'storage/']), is_writable(APP_ROOT . '/storage')],
+            [__('{dir} is writable', ['dir' => 'public/media/']), is_writable(APP_ROOT . '/public/media')],
+            [__('Cron job ran in the last 5 minutes'), !empty($hb['at']) && $hb['at'] > now_utc(-300)],
+            [__('Installer locked'), is_file(APP_ROOT . '/storage/installed.lock')],
+            [__('Debug mode is off'), !Env::get('APP_DEBUG')],
         ];
         $users = $this->db->all('SELECT id, uuid, name, email, is_super_admin, is_active, last_login_at, created_at FROM users WHERE deleted_at IS NULL ORDER BY id LIMIT 500');
         return $this->view('system/index', [
-            'title' => 'System', 'tab' => $tab, 'apps' => $apps, 'mail' => $mail, 'hb' => $hb, 'stats' => $stats, 'checks' => $checks,
+            'title' => 'System', 'tab' => $tab, 'languages' => \App\Services\TranslationService::status(), 'aiWorkspaces' => $this->aiWorkspaces(), 'apps' => $apps, 'mediaApps' => $mediaApps, 'mail' => $mail, 'hb' => $hb, 'stats' => $stats, 'checks' => $checks,
             'updates' => Updater::config(), 'update' => Settings::get('update_available'), 'updateLast' => Settings::get('update_last'),
             'updateChecked' => Settings::get('update_checked_at'), 'updateError' => Settings::get('update_last_error'),
             'backups' => Backup::list(), 'users' => $users,
@@ -74,7 +83,7 @@ final class SystemController extends Controller
         $name = $this->req->str('app_name');
         Settings::set('app_name', $name !== '' ? mb_substr($name, 0, 60) : 'NextaPost');
         Settings::set('allow_registration', $this->req->str('allow_registration') === '1');
-        return $this->back(url('/system?tab=general'), ['success' => 'Settings saved.']);
+        return $this->back(url('/system?tab=general'), ['success' => __('Settings saved.')]);
     }
 
     public function saveMail(): Response
@@ -87,7 +96,7 @@ final class SystemController extends Controller
             'host' => $this->req->str('host'), 'port' => (int) $this->req->str('port', '587') ?: 587,
             'encryption' => in_array($this->req->str('encryption'), ['tls', 'ssl', 'none'], true) ? $this->req->str('encryption') : 'tls',
             'username' => $this->req->str('username'),
-            'password_enc' => $this->req->str('password') !== '' ? Crypto::encrypt((string) $this->req->input('password')) : ($old['password_enc'] ?? ''),
+            'password_enc' => $this->req->str('password') !== '' ? Crypto::encrypt($this->req->raw('password')) : ($old['password_enc'] ?? ''),
             'from_email' => filter_var($this->req->str('from_email'), FILTER_VALIDATE_EMAIL) ? $this->req->str('from_email') : '',
             'from_name' => mb_substr($this->req->str('from_name'), 0, 80),
         ];
@@ -95,19 +104,22 @@ final class SystemController extends Controller
         if ($this->req->str('send_test') === '1') {
             try {
                 Mailer::send($this->user()['email'], app_name() . ' test email', '<p>Email delivery works. 🎉</p>');
-                return $this->back(url('/system?tab=email'), ['success' => 'Saved. A test email was sent to ' . $this->user()['email'] . '.']);
+                return $this->back(url('/system?tab=email'), ['success' => __('Saved. A test email was sent to {email}.', ['email' => $this->user()['email']])]);
             } catch (\Throwable $e) {
-                return $this->back(url('/system?tab=email'), ['error' => 'Saved, but the test email failed: ' . $e->getMessage()]);
+                return $this->back(url('/system?tab=email'), ['error' => __('Saved, but the test email failed: {error}', ['error' => $e->getMessage()])]);
             }
         }
-        return $this->back(url('/system?tab=email'), ['success' => 'Email settings saved.']);
+        return $this->back(url('/system?tab=email'), ['success' => __('Email settings saved.')]);
     }
 
     public function saveIntegrations(): Response
     {
         $this->superAdmin();
         $all = (array) Settings::get('integrations', []);
-        foreach (array_keys(ProviderFactory::APPS) as $key) {
+        foreach (array_merge(array_keys(ProviderFactory::APPS), array_keys(\App\Services\MediaSourceService::APPS)) as $key) {
+            if (!array_key_exists($key, $this->req->body)) {
+                continue;
+            }
             $id = trim((string) ($this->req->arr($key)['client_id'] ?? ''));
             $secret = trim((string) ($this->req->arr($key)['client_secret'] ?? ''));
             $entry = $all[$key] ?? [];
@@ -121,7 +133,7 @@ final class SystemController extends Controller
             $all[$key] = $entry;
         }
         Settings::set('integrations', $all);
-        return $this->back(url('/system?tab=integrations'), ['success' => 'Integration keys saved.']);
+        return $this->back(url('/system?tab=integrations'), ['success' => __('Integration keys saved.')]);
     }
 
     public function saveUpdates(): Response
@@ -129,17 +141,17 @@ final class SystemController extends Controller
         $this->superAdmin();
         $server = rtrim($this->req->str('server'), '/');
         if ($server !== '' && !preg_match('#^https://[^\s]+$#', $server)) {
-            return $this->back(url('/system?tab=updates'), ['error' => 'The update server address must start with https://']);
+            return $this->back(url('/system?tab=updates'), ['error' => __('The update server address must start with https://')]);
         }
         $key = $this->req->str('public_key');
         if ($key !== '' && strlen((string) base64_decode($key, true)) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES) {
-            return $this->back(url('/system?tab=updates'), ['error' => 'The signing public key must be a base64 Ed25519 key.']);
+            return $this->back(url('/system?tab=updates'), ['error' => __('The signing public key must be a base64 Ed25519 key.')]);
         }
         Settings::set('updates', [
             'server' => $server ?: 'https://updates.nextawebsolution.com', 'channel' => in_array($this->req->str('channel'), ['stable', 'beta'], true) ? $this->req->str('channel') : 'stable',
             'auto_install' => $this->req->str('auto_install') === '1', 'public_key' => $key, 'license_key' => mb_substr($this->req->str('license_key'), 0, 200),
         ]);
-        return $this->back(url('/system?tab=updates'), ['success' => 'Update settings saved.']);
+        return $this->back(url('/system?tab=updates'), ['success' => __('Update settings saved.')]);
     }
 
     public function checkUpdates(): Response
@@ -150,7 +162,7 @@ final class SystemController extends Controller
         } catch (\Throwable $e) {
             return $this->back(url('/system?tab=updates'), ['error' => $e->getMessage()]);
         }
-        return $this->back(url('/system?tab=updates'), ['success' => $info ? 'Version ' . $info['version'] . ' is available.' : 'You’re on the latest version (' . APP_VERSION . ').']);
+        return $this->back(url('/system?tab=updates'), ['success' => $info ? __('Version {v} is available.', ['v' => $info['version']]) : __('You’re on the latest version ({v}).', ['v' => APP_VERSION])]);
     }
 
     public function installUpdate(): Response
@@ -161,7 +173,7 @@ final class SystemController extends Controller
         } catch (\Throwable $e) {
             return $this->back(url('/system?tab=updates'), ['error' => $e->getMessage()]);
         }
-        Session::flash('success', 'Updated to version ' . $v . '. A backup was saved first.');
+        Session::flash('success', __('Updated to version {v}. A backup was saved first.', ['v' => $v]));
         return $this->redirect(url('/system?tab=updates'));
     }
 
@@ -170,7 +182,7 @@ final class SystemController extends Controller
         $this->superAdmin();
         $f = $this->req->files['package'] ?? null;
         if (!is_array($f) || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || !is_uploaded_file((string) $f['tmp_name'])) {
-            return $this->back(url('/system?tab=updates'), ['error' => 'Choose the update .zip file (max ' . ini_get('upload_max_filesize') . ').']);
+            return $this->back(url('/system?tab=updates'), ['error' => __('Choose the update .zip file (max {size}).', ['size' => ini_get('upload_max_filesize')])]);
         }
         $dest = APP_ROOT . '/storage/updates/manual-' . bin2hex(random_bytes(6)) . '.zip';
         move_uploaded_file((string) $f['tmp_name'], $dest);
@@ -180,7 +192,7 @@ final class SystemController extends Controller
             @unlink($dest);
             return $this->back(url('/system?tab=updates'), ['error' => $e->getMessage()]);
         }
-        Session::flash('success', 'Installed version ' . $v . '. A backup was saved first.');
+        Session::flash('success', __('Installed version {v}. A backup was saved first.', ['v' => $v]));
         return $this->redirect(url('/system?tab=updates'));
     }
 
@@ -193,7 +205,7 @@ final class SystemController extends Controller
         } catch (\Throwable $e) {
             return $this->back(url('/system?tab=backups'), ['error' => $e->getMessage()]);
         }
-        return $this->back(url('/system?tab=backups'), ['success' => 'Backup created: ' . basename($file)]);
+        return $this->back(url('/system?tab=backups'), ['success' => __('Backup created: {file}', ['file' => basename($file)])]);
     }
 
     public function downloadBackup(string $name): Response
@@ -201,7 +213,7 @@ final class SystemController extends Controller
         $this->superAdmin();
         $path = Backup::path($name);
         if (!$path) {
-            return $this->back(url('/system?tab=backups'), ['error' => 'Backup not found.']);
+            return $this->back(url('/system?tab=backups'), ['error' => __('Backup not found.')]);
         }
         while (ob_get_level() > 0) {
             ob_end_clean();
@@ -221,7 +233,7 @@ final class SystemController extends Controller
         if ($path) {
             unlink($path);
         }
-        return $this->back(url('/system?tab=backups'), ['success' => 'Backup deleted.']);
+        return $this->back(url('/system?tab=backups'), ['success' => __('Backup deleted.')]);
     }
 
     public function toggleUser(string $uuid): Response
@@ -229,7 +241,7 @@ final class SystemController extends Controller
         $me = $this->superAdmin();
         $u = $this->db->one('SELECT * FROM users WHERE uuid = ?', [$uuid]);
         if (!$u || (int) $u['id'] === (int) $me['id']) {
-            return $this->back(url('/system?tab=users'), ['error' => 'You can’t change your own account here.']);
+            return $this->back(url('/system?tab=users'), ['error' => __('You can’t change your own account here.')]);
         }
         $active = (int) $u['is_active'] ? 0 : 1;
         $this->db->update('users', ['is_active' => $active], 'id = ?', [$u['id']]);
@@ -242,7 +254,7 @@ final class SystemController extends Controller
         $me = $this->superAdmin();
         $u = $this->db->one('SELECT * FROM users WHERE uuid = ? AND deleted_at IS NULL', [$uuid]);
         if (!$u || (int) $u['id'] === (int) $me['id']) {
-            return $this->back(url('/system?tab=users'), ['error' => 'You can’t delete your own account here.']);
+            return $this->back(url('/system?tab=users'), ['error' => __('You can’t delete your own account here.')]);
         }
         $soleAdmin = $this->db->value(
             "SELECT w.name FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
@@ -251,19 +263,75 @@ final class SystemController extends Controller
             [$u['id']]
         );
         if ($soleAdmin) {
-            return $this->back(url('/system?tab=users'), ['error' => $u['name'] . ' is the only admin of “' . $soleAdmin . '”. Make someone else admin there first.']);
+            return $this->back(url('/system?tab=users'), ['error' => __('{name} is the only admin of “{workspace}”. Make someone else admin there first.', ['name' => $u['name'], 'workspace' => $soleAdmin])]);
         }
         $this->db->tx(function () use ($u): void {
             $this->db->run('DELETE FROM workspace_members WHERE user_id = ?', [$u['id']]);
             $this->db->run('DELETE FROM password_resets WHERE user_id = ?', [$u['id']]);
             $this->db->run('UPDATE activity_log SET ip = NULL WHERE user_id = ?', [$u['id']]);
+            // 2.0 data: API access, connected apps and third-party (Canva/Google) sign-ins go with the person.
+            $this->db->run('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', [now_utc(), $u['id']]);
+            $this->db->run('DELETE FROM oauth_tokens WHERE user_id = ?', [$u['id']]);
+            $this->db->run('DELETE FROM oauth_codes WHERE user_id = ?', [$u['id']]);
+            $this->db->run('DELETE FROM media_connections WHERE user_id = ?', [$u['id']]);
             $this->db->update('users', [
                 'name' => 'Deleted user', 'email' => 'deleted-' . $u['uuid'] . '@deleted.invalid',
                 'password_hash' => \App\Core\Auth::hash(bin2hex(random_bytes(24))), 'is_active' => 0, 'is_super_admin' => 0,
-                'deleted_at' => now_utc(), 'updated_at' => now_utc(),
+                'locale' => null, 'notify_json' => null, 'deleted_at' => now_utc(), 'updated_at' => now_utc(),
             ], 'id = ?', [$u['id']]);
         });
-        return $this->back(url('/system?tab=users'), ['success' => 'The account was deleted and its personal data removed.']);
+        return $this->back(url('/system?tab=users'), ['success' => __('The account was deleted and its personal data removed.')]);
+    }
+
+    /** Workspaces whose AI key this admin may use for translations (they are an admin there and AI is set up). */
+    private function aiWorkspaces(): array
+    {
+        $rows = $this->db->all(
+            "SELECT w.* FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = ? AND m.role = 'admin' ORDER BY w.name",
+            [$this->user()['id']]
+        );
+        $out = [];
+        foreach ($rows as $w) {
+            if (\App\Services\AiService::configured($w)) {
+                $out[] = ['uuid' => $w['uuid'], 'name' => $w['name'], 'provider' => $w['ai_provider']];
+            }
+        }
+        return $out;
+    }
+
+    /** Fill the next batch of missing interface text for one language (JSON; the page calls it until nothing is left). */
+    public function fillLanguage(string $code): Response
+    {
+        $this->superAdmin();
+        @set_time_limit(150);
+        $wsUuid = $this->req->str('workspace');
+        $ws = null;
+        foreach ($this->db->all(
+            "SELECT w.* FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = ? AND m.role = 'admin' WHERE w.uuid = ?",
+            [$this->user()['id'], $wsUuid]
+        ) as $row) {
+            $ws = $row;
+        }
+        if (!$ws) {
+            return $this->json(['error' => ['message' => __('Choose one of your workspaces.')]], 422);
+        }
+        if (!\App\Core\RateLimiter::hit($this->db, 'ai-i18n:' . $this->user()['id'], max(20, (int) Env::get('AI_TRANSLATE_RATE_LIMIT', 400)), 3600)) {
+            return $this->json(['error' => ['message' => __('You’ve used the assistant a lot in the last hour. Try again later.')]], 429);
+        }
+        $r = (new \App\Services\TranslationService($this->db))->fillBatch($ws, $code);
+        if ($r['error'] !== null) {
+            return $this->json(['error' => ['message' => $r['error']], 'remaining' => $r['remaining']], 422);
+        }
+        return $this->json(['ok' => true, 'filled' => $r['filled'], 'remaining' => $r['remaining'], 'status' => \App\Services\TranslationService::status()[$code] ?? null]);
+    }
+
+    public function resetLanguage(string $code): Response
+    {
+        $this->superAdmin();
+        if (!\App\Services\TranslationService::reset($code)) {
+            return $this->back(url('/system?tab=languages'), ['error' => __('Unknown language.')]);
+        }
+        return $this->back(url('/system?tab=languages'), ['success' => __('This site’s own translations for {lang} were removed.', ['lang' => \App\Core\Lang::LOCALES[$code][1]])]);
     }
 
     public function runCron(): Response
@@ -271,6 +339,6 @@ final class SystemController extends Controller
         $this->superAdmin();
         @set_time_limit(120);
         $r = (new \App\Services\Worker($this->db))->run(25, true);
-        return $this->back(url('/system?tab=health'), ['success' => 'Scheduler ran: ' . $r['processed'] . ' job(s) processed.']);
+        return $this->back(url('/system?tab=health'), ['success' => __('Scheduler ran: {n} job(s) processed.', ['n' => $r['processed']])]);
     }
 }

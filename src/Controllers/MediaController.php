@@ -16,10 +16,27 @@ final class MediaController extends Controller
         $this->workspace($ws);
         $rows = $this->db->all('SELECT * FROM media WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT 300', [$this->ws['id']]);
         $used = (int) $this->db->value('SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE workspace_id = ?', [$this->ws['id']]);
-        return $this->view('media/index', [
+        $sources = \App\Services\MediaSourceService::available();
+        $ms = new \App\Services\MediaSourceService($this->db);
+        $connected = [];
+        foreach (['canva', 'google'] as $s) {
+            $c = $ms->connection((int) \App\Core\Auth::id(), $s);
+            $connected[$s] = $c ? ['name' => $c['account_name']] : null;
+        }
+        $res = $this->view('media/index', [
             'title' => 'Media library', 'media' => array_map([MediaService::class, 'toJson'], $rows), 'used' => $used,
             'canEdit' => $this->can('media'), 'uploadUrl' => $this->wsUrl('media'), 'maxUpload' => MediaService::maxBytes(),
+            'aiEnabled' => \App\Services\AiService::configured($this->ws),
+            'sources' => $this->can('media') ? $sources : array_map(fn () => false, $sources), 'connected' => $connected,
         ]);
+        if ($sources['google_drive']) {
+            // Google's file picker loads its script from apis.google.com and opens in a docs.google.com frame.
+            $csp = \App\Core\Response::csp();
+            $csp = str_replace("script-src 'self'", "script-src 'self' https://apis.google.com https://www.gstatic.com", $csp);
+            $csp = str_replace("connect-src 'self'", "connect-src 'self' https://apis.google.com https://www.googleapis.com https://content.googleapis.com", $csp);
+            $res->headers['Content-Security-Policy'] = $csp . '; frame-src https://docs.google.com https://drive.google.com https://content.googleapis.com https://accounts.google.com';
+        }
+        return $res;
     }
 
     public function list(string $ws): Response
@@ -34,11 +51,11 @@ final class MediaController extends Controller
         $this->workspace($ws);
         $this->authorize('media');
         if (!\App\Core\RateLimiter::hit($this->db, 'upload:' . Auth::id(), 120, 3600)) {
-            return $this->json(['error' => ['message' => 'Upload limit reached (120 files per hour). Try again later.']], 429);
+            return $this->json(['error' => ['message' => __('Upload limit reached (120 files per hour). Try again later.')]], 429);
         }
         $file = $this->req->files['file'] ?? null;
         if (!is_array($file) || is_array($file['name'] ?? null)) {
-            return $this->json(['error' => ['message' => 'Choose a file to upload. If you chose one, it may be larger than the server allows (' . ini_get('post_max_size') . ').']], 422);
+            return $this->json(['error' => ['message' => __('Choose a file to upload. If you chose one, it may be larger than the server allows ({size}).', ['size' => ini_get('post_max_size')])]], 422);
         }
         try {
             $m = (new MediaService($this->db))->upload($this->ws, (int) Auth::id(), $file);
@@ -56,7 +73,7 @@ final class MediaController extends Controller
         $path = $m ? MediaService::absPath($m) : null;
         $root = realpath(APP_ROOT . '/storage/documents');
         if (!$m || !$root || !is_file((string) $path) || !str_starts_with((string) realpath((string) $path), $root . DIRECTORY_SEPARATOR)) {
-            throw new HttpException(404, 'File not found.');
+            throw new HttpException(404, __('File not found.'));
         }
         $name = (string) preg_replace('/[^\w .()-]+/u', '_', (string) $m['original_name']) ?: 'document';
         while (ob_get_level() > 0) {
@@ -80,7 +97,7 @@ final class MediaController extends Controller
         $this->authorize('media');
         $m = $this->db->one('SELECT * FROM media WHERE workspace_id = ? AND uuid = ?', [$this->ws['id'], $id]);
         if (!$m) {
-            throw new HttpException(404, 'File not found.');
+            throw new HttpException(404, __('File not found.'));
         }
         $this->db->update('media', ['alt_text' => mb_substr($this->req->str('alt'), 0, 1000) ?: null], 'id = ?', [$m['id']]);
         return $this->json(['ok' => true]);
@@ -92,14 +109,14 @@ final class MediaController extends Controller
         $this->authorize('media');
         $m = $this->db->one('SELECT * FROM media WHERE workspace_id = ? AND uuid = ?', [$this->ws['id'], $id]);
         if (!$m) {
-            throw new HttpException(404, 'File not found.');
+            throw new HttpException(404, __('File not found.'));
         }
         $svc = new MediaService($this->db);
         if ($svc->inUseByPendingPosts((int) $m['id']) > 0) {
-            $msg = 'This file is attached to a draft or scheduled post. Remove it from those posts first.';
+            $msg = __('This file is attached to a draft or scheduled post. Remove it from those posts first.');
             return $this->req->wantsJson() ? $this->json(['error' => ['message' => $msg]], 422) : $this->back($this->wsUrl('media'), ['error' => $msg]);
         }
         $svc->delete($m);
-        return $this->req->wantsJson() ? $this->json(['ok' => true]) : $this->back($this->wsUrl('media'), ['success' => 'File deleted.']);
+        return $this->req->wantsJson() ? $this->json(['ok' => true]) : $this->back($this->wsUrl('media'), ['success' => __('File deleted.')]);
     }
 }
