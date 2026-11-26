@@ -13,15 +13,16 @@ $path = app()->request->path ?? '/';
 <meta name="color-scheme" content="light dark">
 <title><?= e(__($title ?? app_name())) ?> · <?= e(app_name()) ?></title>
 <link rel="icon" href="<?= asset('img/favicon.svg') ?>" type="image/svg+xml">
-<script nonce="<?= e(csp_nonce()) ?>">(function(){var t=document.documentElement.dataset.theme;if(t==='system'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.classList.toggle('dark',t==='dark')})();</script>
+<script data-cfasync="false" nonce="<?= e(csp_nonce()) ?>">(function(){var t=document.documentElement.dataset.theme;if(t==='system'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.classList.toggle('dark',t==='dark')})();</script>
 <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
-<script nonce="<?= e(csp_nonce()) ?>">window.NP_I18N=<?= json_encode(\App\Core\Lang::forJs(\App\Core\Lang::JS_KEYS), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;</script>
-<script src="<?= asset('js/app.js') ?>"></script>
+<script data-cfasync="false" nonce="<?= e(csp_nonce()) ?>">window.NP_I18N=<?= json_encode(\App\Core\Lang::forJs(\App\Core\Lang::JS_KEYS), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;</script>
+<script data-cfasync="false" src="<?= asset('js/app.js') ?>"></script>
 <?= $head ?? '' ?>
-<script defer src="<?= asset('vendor/alpine-collapse.min.js') ?>"></script>
-<script defer src="<?= asset('vendor/alpine.min.js') ?>"></script>
+<script data-cfasync="false" defer src="<?= asset('vendor/alpine-collapse.min.js') ?>"></script>
+<script data-cfasync="false" defer src="<?= asset('vendor/alpine.min.js') ?>"></script>
 </head>
 <body class="bg-canvas text-ink" x-data="appShell" data-flash="<?= json_attr($flashes) ?>" @keydown.window="hotkeys($event)" @new-workspace.window="openNewWs()">
+<div class="js-warning" role="alert" x-data x-init="$el.remove()"><?= e(__('This page’s scripts didn’t load, so some buttons and settings won’t work. If the site uses Cloudflare, turn off Rocket Loader; also turn off JavaScript minify or combine in any speed optimiser. Then reload.')) ?></div>
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 btn btn-primary"><?= e(__('Skip to content')) ?></a>
 <div class="flex min-h-full">
   <!-- Mobile drawer backdrop -->

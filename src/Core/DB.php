@@ -54,8 +54,14 @@ final class DB
         return $this->pdo;
     }
 
+    /** Test-only hook: lets the test suites emulate MySQL strict mode on SQLite. Never set in production. */
+    public static ?\Closure $writeCheck = null;
+
     public function run(string $sql, array $params = []): PDOStatement
     {
+        if (self::$writeCheck !== null) {
+            (self::$writeCheck)($sql, array_values($params));
+        }
         $stmt = $this->pdo()->prepare($sql);
         $stmt->execute(array_values($params));
         return $stmt;

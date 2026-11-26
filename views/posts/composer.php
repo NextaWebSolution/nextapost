@@ -1,5 +1,5 @@
 <?php
-$head = '<script src="' . asset('js/composer.js') . '"></script>';
+$head = '<script data-cfasync="false" src="' . asset('js/composer.js') . '"></script>';
 $p = $cfg['post'];
 /** Media strip for the shared media (target "null") or one channel's own media (target "tab"). */
 $strip = static function (string $t): string {

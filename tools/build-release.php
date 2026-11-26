@@ -47,6 +47,9 @@ foreach ($it as $f) {
             continue 2;
         }
     }
+    if (str_contains('/' . $rel, '/__pycache__/') || str_ends_with($rel, '.pyc')) {
+        continue; // Python test caches
+    }
     // Ship storage/ and public/media/ as empty folders (keep only their protection files).
     if ((str_starts_with($rel, 'storage/') || str_starts_with($rel, 'public/media/')) && basename($rel) !== '.htaccess') {
         continue;

@@ -9,7 +9,7 @@
     <div class="grid gap-4 sm:grid-cols-3" x-show="sources().length">
       <div>
         <label class="label" for="rp-source"><?= e(__('Watch')) ?></label>
-        <select id="rp-source" class="input" x-model="form.source" required :aria-invalid="!!errors.source">
+        <select id="rp-source" class="input" x-model="form.source" required :disabled="!sources().length" :aria-invalid="!!errors.source">
           <option value=""><?= e(__('Choose an account…')) ?></option>
           <template x-for="c in sources()" :key="c.id"><option :value="c.id" x-text="c.name + ' (' + c.networkName + ')'"></option></template>
         </select>
@@ -67,4 +67,4 @@
     <p class="mt-1 text-sm text-muted"><?= e(__('For example: turn every new Instagram Reel into drafts for TikTok, YouTube Shorts and Facebook.')) ?></p>
   </div>
 </div>
-<?php $head = '<script src="' . asset('js/repurpose.js') . '"></script>'; ?>
+<?php $head = '<script data-cfasync="false" src="' . asset('js/repurpose.js') . '"></script>'; ?>

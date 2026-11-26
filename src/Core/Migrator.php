@@ -103,6 +103,8 @@ final class Migrator
         $sql = (string) preg_replace('/\s+UNSIGNED/i', '', $sql);
         $sql = (string) preg_replace('/\)\s*ENGINE=[^;]*;/i', ');', $sql);
         $sql = (string) preg_replace('/CREATE (UNIQUE )?INDEX (?!IF NOT EXISTS)/i', 'CREATE $1INDEX IF NOT EXISTS ', $sql);
+        // SQLite has no MODIFY and doesn't limit text length, so column-size changes don't apply there.
+        $sql = (string) preg_replace('/^\s*ALTER TABLE \w+ MODIFY [^;]*;/mi', '', $sql);
         return $sql;
     }
 }

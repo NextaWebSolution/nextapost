@@ -11,7 +11,7 @@ $cfg = [
     'ws' => $ws['uuid'],
     'labels' => $labels,
 ];
-$head = '<script src="' . asset('js/calendar.js') . '"></script>';
+$head = '<script data-cfasync="false" src="' . asset('js/calendar.js') . '"></script>';
 ?>
 <div class="flex h-[calc(100dvh-3.5rem)] min-h-[520px]" x-data="calendarPage(<?= json_attr($cfg) ?>)" @keydown.window="keys($event)">
   <!-- Side panel: channels + unscheduled drafts -->

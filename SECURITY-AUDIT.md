@@ -189,3 +189,16 @@ NextaPost 2.0.0 is fit for production on cPanel **once**:
 3. one real post per network you offer has succeeded.
 
 Add 2FA for super admins and an independent penetration test before onboarding paying clients.
+
+---
+
+## Addendum — 2.0.1 (26 Nov 2026)
+
+Found during the 2.0.1 QA pass and fixed in 2.0.1:
+
+| # | Severity | Issue | Affected file | Fix | Verified by |
+|---|---|---|---|---|---|
+| 13 | Medium | Switching the AI assistant to an OpenAI-compatible server, or changing that server's address, kept the previously saved API key and sent it to the new server | `src/Services/AiService.php` | The saved key is kept only for the same provider and server address; otherwise it's dropped (keyless local servers still work) | `qa_suite`, `tests/qa_fixes_201.py` |
+| 14 | Low | Pages didn't carry LiteSpeed's own no-cache header; a server-level cache rule could store a signed-in page with a stale form token | `src/Core/Response.php` | `X-LiteSpeed-Cache-Control: no-cache` on every page | `tests/qa_fixes_201.py` |
+
+The test database now refuses any value longer than its MySQL column (strict-mode emulation), so the integration suite catches MySQL-only failures. The verdict is unchanged: **SAFE WITH CONDITIONS**.

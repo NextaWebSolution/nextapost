@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.0.2 — 2026-11-26
+
+Fixed:
+- **“Save AI settings” did nothing in browsers with saved passwords.** Chrome’s password manager filled a saved email into the hidden “API base URL” box (the text box before the API key), which then failed URL validation, so the browser silently refused to submit. That box is now switched off unless “OpenAI-compatible” is chosen, and the API key box tells password managers it’s a new secret, not a sign-in
+- The same protection for the SMTP password and app secrets in System, so a password manager can’t fill in your sign-in details there
+- The SMTP port box and the repurposing source list can no longer block their forms while hidden
+- If a form is ever blocked by a field you can’t see, a message now names the field instead of the button doing nothing
+
+## 2.0.1 — 2026-11-26
+
+Fixes for the AI writing assistant and saving settings on MySQL hosting.
+
+Fixed:
+- **AI writing assistant couldn’t be saved on MySQL** when the brand voice was over 1,000 characters or the model name over 100. The form allowed 2,000 and 120, but the database columns were smaller, so the save failed with a server error. The columns now fit everything the form accepts
+- **AI writing assistant couldn’t be turned on when the page’s scripts were blocked** (for example by Cloudflare Rocket Loader or a JavaScript optimiser): the provider list showed only “Off”. The list is now part of the page itself, so it works with or without scripts
+- **Long posts in Hindi, Bengali or with many emoji failed to save on MySQL.** Post text, per-network text, idea notes and templates now hold their full length (65,000 and 20,000 characters) in any language
+- Switching the AI assistant to an OpenAI-compatible server, or changing that server’s address, no longer sends the previously saved API key to the new server
+- Every script now opts out of Cloudflare Rocket Loader, and pages tell LiteSpeed’s cache not to store them, so security tokens on forms never go stale
+
+New:
+- A clear warning appears if the page’s scripts didn’t load, with what to turn off, instead of buttons silently not working
+
+Upgrade notes:
+- Upload the files over 2.0.0 (or use the in-app updater). One small database update runs on the first page load; it only makes columns larger and keeps all data
+
 ## 2.0.0 — 2026-11-21
 
 The biggest NextaPost release so far: AI agents and an API, seven new networks, an ideas board, repurposing, team notes and 18 interface languages.

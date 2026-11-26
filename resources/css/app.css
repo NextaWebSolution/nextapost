@@ -75,6 +75,10 @@
   ::selection { background: color-mix(in srgb, var(--np-brand) 30%, transparent); }
   :focus-visible { outline: 2px solid var(--np-brand-strong); outline-offset: 2px; }
   [x-cloak] { display: none !important; }
+  /* Shown only when the page's scripts never started (blocked or rewritten by an optimiser). Alpine removes it on start. */
+  .js-warning { position: fixed; inset: auto 0.75rem 0.75rem 0.75rem; z-index: 100; visibility: hidden; animation: np-js-warning 0s linear 4s forwards;
+    border-radius: 0.75rem; background: #7f1d1d; color: #fff; padding: 0.75rem 1rem; font-size: 0.875rem; line-height: 1.4; box-shadow: 0 8px 24px rgb(0 0 0 / 0.25); }
+  @keyframes np-js-warning { to { visibility: visible; } }
   input, select, textarea, button { font: inherit; }
 }
 

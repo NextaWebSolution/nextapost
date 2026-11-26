@@ -116,6 +116,10 @@ final class AiService
             $data['ai_key_enc'] = Crypto::encrypt($key);
         } elseif (($ws['ai_provider'] ?? '') !== $provider && $provider !== 'openai_compatible') {
             return ['api_key' => __('Paste the API key for the new provider.')];
+        } elseif ($provider === 'openai_compatible' && !empty($ws['ai_key_enc'])
+            && (($ws['ai_provider'] ?? '') !== $provider || strtolower((string) parse_url((string) ($ws['ai_base_url'] ?? ''), PHP_URL_HOST)) !== strtolower((string) parse_url($base, PHP_URL_HOST)))) {
+            // A key saved for another provider or server is never sent to a new one. Keyless local servers keep working.
+            $data['ai_key_enc'] = null;
         }
         $this->db->update('workspaces', $data, 'id = ?', [$ws['id']]);
         log_activity((int) $ws['id'], 'ai.settings', $provider ? __('AI assistant set to {p}', ['p' => self::PROVIDERS[$provider]['name']]) : __('AI assistant turned off'));

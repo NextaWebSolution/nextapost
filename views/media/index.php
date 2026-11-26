@@ -133,4 +133,4 @@ $cfg = ['items' => $media, 'uploadUrl' => $uploadUrl, 'base' => url('/w/' . $ws[
     </div>
   </div>
 </div>
-<?php $head = '<script src="' . asset('js/media.js') . '"></script>'; ?>
+<?php $head = '<script data-cfasync="false" src="' . asset('js/media.js') . '"></script>'; ?>

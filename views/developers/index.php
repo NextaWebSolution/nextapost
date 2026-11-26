@@ -209,4 +209,4 @@
     </details>
   </section>
 </div>
-<?php $head = '<script src="' . asset('js/developers.js') . '"></script>'; ?>
+<?php $head = '<script data-cfasync="false" src="' . asset('js/developers.js') . '"></script>'; ?>

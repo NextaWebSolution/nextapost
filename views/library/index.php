@@ -136,4 +136,4 @@
     </div>
   </section>
 </div>
-<?php $head = '<script src="' . asset('js/library.js') . '"></script>'; ?>
+<?php $head = '<script data-cfasync="false" src="' . asset('js/library.js') . '"></script>'; ?>

@@ -50,10 +50,10 @@ $tab = isset($tabs[$tab]) ? $tab : 'general';
       <select id="driver" name="driver" class="input" x-model="driver"><option value="smtp"><?= e(__('SMTP (recommended)')) ?></option><option value="mail">PHP mail()</option><option value="log"><?= e(__('Write to log file (testing)')) ?></option></select></div>
     <div class="grid gap-4 sm:grid-cols-3" x-show="driver==='smtp'">
       <div class="sm:col-span-2"><label class="label" for="host"><?= e(__('SMTP host')) ?></label><input id="host" name="host" class="input" value="<?= e($mail['host']) ?>" placeholder="mail.yourdomain.com"></div>
-      <div><label class="label" for="port"><?= e(__('Port')) ?></label><input id="port" name="port" type="number" class="input" value="<?= e((string) $mail['port']) ?>"></div>
+      <div><label class="label" for="port"><?= e(__('Port')) ?></label><input id="port" name="port" type="text" inputmode="numeric" autocomplete="off" class="input" value="<?= e((string) $mail['port']) ?>"></div>
       <div><label class="label" for="encryption"><?= e(__('Security')) ?></label><select id="encryption" name="encryption" class="input"><?php foreach (['tls' => 'STARTTLS (587)', 'ssl' => 'SSL (465)', 'none' => 'None'] as $k => $v): ?><option value="<?= $k ?>"<?= selected($mail['encryption'] === $k) ?>><?= $v ?></option><?php endforeach; ?></select></div>
       <div><label class="label" for="username"><?= e(__('Username')) ?></label><input id="username" name="username" class="input" value="<?= e($mail['username']) ?>" autocomplete="off"></div>
-      <div><label class="label" for="password"><?= e(__('Password')) ?></label><input id="password" name="password" type="password" class="input" placeholder="<?= $mail['password_enc'] ? '•••••••• (saved)' : '' ?>" autocomplete="new-password"></div>
+      <div><label class="label" for="password"><?= e(__('Password')) ?></label><input id="password" name="password" type="password" class="input" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore placeholder="<?= $mail['password_enc'] ? '•••••••• (saved)' : '' ?>" autocomplete="new-password"></div>
     </div>
     <div class="grid gap-4 sm:grid-cols-2">
       <div><label class="label" for="from_email"><?= e(__('From email')) ?></label><input id="from_email" name="from_email" type="email" class="input" value="<?= e($mail['from_email']) ?>" placeholder="no-reply@yourdomain.com"></div>
@@ -78,7 +78,7 @@ $tab = isset($tabs[$tab]) ? $tab : 'general';
         </div>
         <div class="mt-3 grid gap-4 sm:grid-cols-2">
           <div><label class="label" for="<?= $key ?>-id"><?= e($a['id_label']) ?></label><input id="<?= $key ?>-id" name="<?= $key ?>[client_id]" class="input" value="<?= e($a['client_id']) ?>" autocomplete="off" spellcheck="false"></div>
-          <div><label class="label" for="<?= $key ?>-secret"><?= e($a['secret_label']) ?></label><input id="<?= $key ?>-secret" name="<?= $key ?>[client_secret]" type="password" class="input" placeholder="<?= $a['has_secret'] ? '•••••••• (saved)' : '' ?>" autocomplete="new-password"></div>
+          <div><label class="label" for="<?= $key ?>-secret"><?= e($a['secret_label']) ?></label><input id="<?= $key ?>-secret" name="<?= $key ?>[client_secret]" type="password" class="input" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore placeholder="<?= $a['has_secret'] ? '•••••••• (saved)' : '' ?>" autocomplete="new-password"></div>
         </div>
         <label class="label mt-3"><?= e(__('Redirect URL')) ?></label>
         <div class="flex items-center gap-2 rounded-xl bg-canvas p-2.5"><code class="min-w-0 flex-1 break-all text-xs"><?= e($a['redirect']) ?></code><button type="button" class="btn btn-secondary btn-sm" @click="copy()" x-text="copied ? np.t('Copied') : np.t('Copy')"></button></div>
@@ -101,7 +101,7 @@ $tab = isset($tabs[$tab]) ? $tab : 'general';
               <?php if (!empty($a['secret_visible'])): ?>
                 <input id="<?= $key ?>-secret" name="<?= $key ?>[client_secret]" class="input" value="<?= e($a['secret_value']) ?>" autocomplete="off">
               <?php else: ?>
-                <input id="<?= $key ?>-secret" name="<?= $key ?>[client_secret]" type="password" class="input" placeholder="<?= $a['has_secret'] ? '•••••••• (saved)' : '' ?>" autocomplete="new-password">
+                <input id="<?= $key ?>-secret" name="<?= $key ?>[client_secret]" type="password" class="input" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore placeholder="<?= $a['has_secret'] ? '•••••••• (saved)' : '' ?>" autocomplete="new-password">
               <?php endif; ?>
             </div>
           <?php endif; ?>
@@ -250,4 +250,4 @@ $tab = isset($tabs[$tab]) ? $tab : 'general';
   </section>
 <?php endif; ?>
 </div>
-<?php $head = '<script src="' . asset('js/languages.js') . '"></script>'; ?>
+<?php $head = '<script data-cfasync="false" src="' . asset('js/languages.js') . '"></script>'; ?>

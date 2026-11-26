@@ -68,6 +68,8 @@ final class Response
             if (str_starts_with($this->headers['Content-Type'] ?? '', 'text/html')) {
                 $defaults['Content-Security-Policy'] = self::csp();
                 $defaults['Cache-Control'] = 'no-store, private';
+                // LiteSpeed's server cache follows its own header; a cached page would carry a stale security token and every save would fail.
+                $defaults['X-LiteSpeed-Cache-Control'] = 'no-cache';
             }
             foreach ($this->headers + $defaults as $k => $v) {
                 header($k . ': ' . $v);

@@ -102,4 +102,4 @@
     </div>
   </div>
 </div>
-<?php $head = '<script src="' . asset('js/channels.js') . '"></script>'; ?>
+<?php $head = '<script data-cfasync="false" src="' . asset('js/channels.js') . '"></script>'; ?>

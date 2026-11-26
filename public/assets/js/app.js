@@ -34,6 +34,18 @@
   };
 
   np.toast = (msg, type) => { if (window.Alpine) Alpine.store('toast').push(msg, type); };
+
+  // The browser silently refuses to submit a form when a field it can't show (hidden, or in a closed panel) is invalid,
+  // e.g. after a password manager autofills it. Say which field it is instead of leaving a button that does nothing.
+  let invalidShown = 0;
+  document.addEventListener('invalid', (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLElement) || el.getClientRects().length || Date.now() - invalidShown < 1000) return;
+    invalidShown = Date.now();
+    const lab = (el.id && document.querySelector('label[for="' + CSS.escape(el.id) + '"]')) || el.closest('label');
+    const name = ((lab && lab.textContent) || el.getAttribute('aria-label') || el.name || '').trim();
+    np.toast(np.t('Can’t save: “{field}” has an invalid value ({message}). It may have been filled in by your browser’s autofill.', { field: name, message: el.validationMessage }), 'error');
+  }, true);
   np.esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   np.count = (s) => {
     s = String(s || '');

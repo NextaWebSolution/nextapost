@@ -126,7 +126,7 @@ $css = $appBase . '/assets/css/app.css?v=' . APP_VERSION;
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>Install NextaPost</title>
 <link rel="icon" href="<?= $h($appBase) ?>/assets/img/favicon.svg" type="image/svg+xml">
-<script nonce="<?= $h($nonce) ?>">document.documentElement.classList.toggle('dark', matchMedia('(prefers-color-scheme: dark)').matches);
+<script data-cfasync="false" nonce="<?= $h($nonce) ?>">document.documentElement.classList.toggle('dark', matchMedia('(prefers-color-scheme: dark)').matches);
 document.addEventListener('submit', function (e) { var b = e.target.querySelector('button[type=submit]'); if (b) { setTimeout(function () { b.disabled = true; b.textContent = 'Installing…'; }, 0); } });</script>
 <link rel="stylesheet" href="<?= $h($css) ?>">
 </head>

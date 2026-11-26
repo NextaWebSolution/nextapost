@@ -43,22 +43,22 @@
       <div>
         <label class="label" for="ai_provider"><?= e(__('Provider')) ?></label>
         <select id="ai_provider" name="provider" class="input" x-model="provider">
-          <option value=""><?= e(__('Off')) ?></option>
-          <template x-for="(p, id) in providers" :key="id"><option :value="id" x-text="p.name" :selected="id === provider"></option></template>
+          <option value=""<?= selected($ai['provider'] === '') ?>><?= e(__('Off')) ?></option>
+          <?php foreach ($aiProviders as $pid => $p): ?><option value="<?= e($pid) ?>"<?= selected($ai['provider'] === $pid) ?>><?= e($p['name']) ?></option><?php endforeach; ?>
         </select>
       </div>
       <div x-show="provider">
         <label class="label" for="ai_model"><?= e(__('Model')) ?></label>
-        <input id="ai_model" name="model" class="input" maxlength="120" :value="cfg.provider === provider ? cfg.model : (providers[provider] || {}).model" :placeholder="(providers[provider] || {}).model || 'llama-3.3-70b'" autocomplete="off">
+        <input id="ai_model" autocomplete="off" name="model" class="input" maxlength="120" :value="cfg.provider === provider ? cfg.model : (providers[provider] || {}).model" :placeholder="(providers[provider] || {}).model || 'llama-3.3-70b'" autocomplete="off">
         <p class="help"><?= e(__('Any model your key can use. The default is fast and low-cost.')) ?></p>
       </div>
       <div x-show="provider === 'openai_compatible'" class="sm:col-span-2">
         <label class="label" for="ai_base"><?= e(__('API base URL')) ?></label>
-        <input id="ai_base" name="base_url" type="url" class="input" maxlength="300" value="<?= e($ai['base_url']) ?>" placeholder="https://openrouter.ai/api/v1">
+        <input id="ai_base" name="base_url" type="url" class="input" maxlength="300" autocomplete="off" :disabled="provider !== 'openai_compatible'" value="<?= e($ai['base_url']) ?>" placeholder="https://openrouter.ai/api/v1">
       </div>
       <div x-show="provider" class="sm:col-span-2">
         <label class="label" for="ai_key"><?= e(__('API key')) ?></label>
-        <input id="ai_key" name="api_key" type="password" class="input font-mono" autocomplete="off" maxlength="500"
+        <input id="ai_key" name="api_key" type="password" class="input font-mono" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore maxlength="500"
                :placeholder="cfg.key_saved && cfg.provider === provider ? <?= js(__('Saved')) ?> + ' (' + cfg.key_preview + '). ' + <?= js(__('Leave blank to keep it.')) ?> : ((providers[provider] || {}).key_hint || '')">
         <p class="help"><?= e(__('Stored encrypted. Only admins can change it; nobody can read it back.')) ?></p>
       </div>
