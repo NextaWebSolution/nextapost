@@ -71,7 +71,7 @@ final class SystemController extends Controller
             'updates' => Updater::config(), 'update' => Settings::get('update_available'), 'updateLast' => Settings::get('update_last'),
             'updateChecked' => Settings::get('update_checked_at'), 'updateError' => Settings::get('update_last_error'),
             'backups' => Backup::list(), 'users' => $users,
-            'general' => ['app_name' => app_name(), 'allow_registration' => (bool) Settings::get('allow_registration', false)],
+            'general' => ['app_name' => app_name(), 'allow_registration' => (bool) Settings::get('allow_registration', false), 'comment_dm' => \App\Services\CommentDmService::enabled()],
             'cronCmd' => '/usr/local/bin/php ' . APP_ROOT . '/bin/cron.php >/dev/null 2>&1',
             'failedJobs' => $this->db->all("SELECT id, type, last_error, finished_at FROM jobs WHERE status = 'failed' ORDER BY id DESC LIMIT 10"),
         ]);
@@ -83,6 +83,7 @@ final class SystemController extends Controller
         $name = $this->req->str('app_name');
         Settings::set('app_name', $name !== '' ? mb_substr($name, 0, 60) : 'NextaPost');
         Settings::set('allow_registration', $this->req->str('allow_registration') === '1');
+        Settings::set('comment_dm_enabled', $this->req->str('comment_dm') === '1');
         return $this->back(url('/system?tab=general'), ['success' => __('Settings saved.')]);
     }
 

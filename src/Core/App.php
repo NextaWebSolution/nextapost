@@ -43,12 +43,43 @@ final class App
         return self::$instance;
     }
 
+    /** @var callable[] work to do after the response has gone out (webhooks answer Meta first, then send DMs) */
+    private array $deferred = [];
+
+    public function defer(callable $fn): void
+    {
+        $this->deferred[] = $fn;
+    }
+
+    private function runDeferred(): void
+    {
+        if (!$this->deferred) {
+            return;
+        }
+        ignore_user_abort(true);
+        @set_time_limit(60);
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        } elseif (function_exists('litespeed_finish_request')) {
+            litespeed_finish_request();
+        }
+        foreach ($this->deferred as $fn) {
+            try {
+                $fn();
+            } catch (\Throwable $e) {
+                Logger::error($e);
+            }
+        }
+        $this->deferred = [];
+    }
+
     public function run(): void
     {
         $req = Request::capture();
         $this->request = $req;
         if (self::isStatelessPath($req->path)) {
             $this->runStateless($req);
+            $this->runDeferred();
             return;
         }
         Session::start();
@@ -89,7 +120,7 @@ final class App
     {
         return str_starts_with($path, '/api/v1/') || $path === '/api/v1' || $path === '/mcp' || str_starts_with($path, '/mcp/')
             || $path === '/oauth/token' || $path === '/oauth/register' || $path === '/oauth/revoke'
-            || str_starts_with($path, '/.well-known/oauth-');
+            || str_starts_with($path, '/.well-known/oauth-') || $path === '/webhooks/meta';
     }
 
     private function runStateless(Request $req): void

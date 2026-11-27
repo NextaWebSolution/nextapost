@@ -27,7 +27,7 @@ final class MetaGraph
     {
         return 'https://www.facebook.com/' . self::version() . '/dialog/oauth?' . http_build_query([
             'client_id' => $app['client_id'], 'redirect_uri' => $redirectUri, 'state' => $state,
-            'scope' => self::SCOPES, 'response_type' => 'code',
+            'scope' => self::SCOPES . \App\Services\CommentDmService::extraScopes('meta'), 'response_type' => 'code',
         ]);
     }
 

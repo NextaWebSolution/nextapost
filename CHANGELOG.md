@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0 — 2026-11-27
+
+New:
+- **Comment-to-DM flows (optional).** When someone comments a keyword on your Instagram or Facebook post, NextaPost can reply under the comment, send them a DM with a button, check that they follow you (Instagram), and then send your link. Includes keyword matching that ignores case and punctuation and allows one typo, Hindi and emoji keywords, words to ignore, all posts or chosen posts, once per person, random public replies, a live DM preview, tracked link clicks, per-flow stats and an activity log
+- The feature is off by default and completely hidden until a super admin turns it on in **System → General → Optional features**. While it is off, NextaPost doesn’t ask Meta for any messaging permission
+- Built for viral posts: comments are answered straight from Meta’s webhook, anything over Meta’s hourly limit waits in a queue instead of being dropped, and repeat deliveries from Meta are ignored
+- Uses Meta’s official API only. Webhooks must carry Meta’s signature; unsigned or forged requests are refused
+
+Changed:
+- System → General has a new “Optional features” section
+- The MySQL compatibility check now also understands named foreign keys
+
+Upgrade notes:
+- Upload the files over 2.0.x (or use the in-app updater). Two new tables are created on the first page load; nothing existing changes
+- To use Comment-to-DM: turn it on, add the webhook in your Meta app, reconnect your Instagram/Facebook accounts once, then press “Turn on DMs”. See README → Comment-to-DM flows
+
 ## 2.0.2 — 2026-11-26
 
 Fixed:

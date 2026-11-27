@@ -45,6 +45,12 @@ final class Worker
         } catch (\Throwable $e) {
             Logger::error('Repurpose: ' . $e->getMessage());
         }
+        try {
+            // Comment-to-DM: anything the webhook didn't finish, and comments held back by the hourly limit.
+            (new CommentDmService($this->db))->runDue(min($deadline, time() + 20));
+        } catch (\Throwable $e) {
+            Logger::error('Comment-to-DM: ' . $e->getMessage());
+        }
         $processed = 0;
         while (time() < $deadline && ($job = $this->queue->claim($workerId))) {
             $this->handle($job);
@@ -118,6 +124,7 @@ final class Worker
         $this->queue->prune();
         (new WebhookService($this->db))->prune();
         (new OAuthService($this->db))->prune();
+        (new CommentDmService($this->db))->prune();
         Logger::prune();
         $this->db->run('DELETE FROM rate_limits WHERE reset_at < ?', [time()]);
         $this->db->run('DELETE FROM password_resets WHERE expires_at < ?', [now_utc(-86400)]);

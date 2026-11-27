@@ -8,6 +8,10 @@ use App\Controllers\ApiController as A;
 use App\Controllers\McpController as M;
 use App\Controllers\OAuthController as O;
 
+// Instagram & Facebook webhooks for Comment-to-DM flows (signed by Meta; 404 while the module is off)
+$r->get('/webhooks/meta', [App\Controllers\MetaWebhookController::class, 'verify']);
+$r->post('/webhooks/meta', [App\Controllers\MetaWebhookController::class, 'receive']);
+
 // MCP server for AI agents
 $r->post('/mcp', [M::class, 'handle']);
 $r->get('/mcp', [M::class, 'notAllowed']);

@@ -43,7 +43,7 @@ final class InstagramDirectProvider extends InstagramBase
     {
         return 'https://www.instagram.com/oauth/authorize?' . http_build_query([
             'client_id' => $app['client_id'], 'redirect_uri' => $redirectUri, 'response_type' => 'code', 'state' => $state,
-            'scope' => 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments',
+            'scope' => 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments' . \App\Services\CommentDmService::extraScopes('instagram'),
         ]);
     }
 

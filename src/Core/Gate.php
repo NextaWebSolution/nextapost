@@ -50,7 +50,7 @@ final class Gate
             'edit', 'media' => in_array($role, ['admin', 'editor', 'contributor'], true),
             'publish' => $role === 'admin' || ($approvalOff && in_array($role, ['editor', 'contributor'], true)) || ($role === 'editor' && ($workspace['approval_mode'] ?? '') === 'editors'),
             'approve' => in_array($role, ['admin', 'approver'], true),
-            'library' => in_array($role, ['admin', 'editor'], true),
+            'library', 'automations' => in_array($role, ['admin', 'editor'], true),
             'channels', 'settings', 'members' => $role === 'admin',
             default => false,
         };

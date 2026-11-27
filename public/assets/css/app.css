@@ -1,4 +1,4 @@
-/*! NextaPost 2.0.0 | Tailwind CSS v4 (MIT) */
+/*! NextaPost 2.0.2 | Tailwind CSS v4 (MIT) */
 @layer properties;
 @layer theme, base, components, utilities;
 @layer theme {
@@ -37,6 +37,7 @@
 --font-weight-bold: 700;
 --tracking-tight: -0.025em;
 --tracking-wide: 0.025em;
+--radius-sm: 0.25rem;
 --radius-md: 0.375rem;
 --radius-lg: 0.5rem;
 --radius-xl: 0.75rem;
@@ -354,6 +355,9 @@ margin-inline-end: auto;
 .-mt-1 {
 margin-top: calc(var(--spacing) * -1);
 }
+.mt-0 {
+margin-top: 0px;
+}
 .mt-0\.5 {
 margin-top: calc(var(--spacing) * 0.5);
 }
@@ -490,6 +494,10 @@ height: calc(var(--spacing) * 4);
 width: calc(var(--spacing) * 5);
 height: calc(var(--spacing) * 5);
 }
+.size-6 {
+width: calc(var(--spacing) * 6);
+height: calc(var(--spacing) * 6);
+}
 .size-7 {
 width: calc(var(--spacing) * 7);
 height: calc(var(--spacing) * 7);
@@ -560,6 +568,9 @@ max-height: 85vh;
 .max-h-\[90vh\] {
 max-height: 90vh;
 }
+.max-h-\[92vh\] {
+max-height: 92vh;
+}
 .min-h-0 {
 min-height: 0px;
 }
@@ -614,6 +625,9 @@ width: calc(var(--spacing) * 72);
 .w-auto {
 width: auto;
 }
+.w-fit {
+width: fit-content;
+}
 .w-full {
 width: 100%;
 }
@@ -637,6 +651,12 @@ max-width: 8rem;
 }
 .max-w-\[9rem\] {
 max-width: 9rem;
+}
+.max-w-\[16rem\] {
+max-width: 16rem;
+}
+.max-w-\[85\%\] {
+max-width: 85%;
 }
 .max-w-full {
 max-width: 100%;
@@ -767,6 +787,9 @@ gap: calc(var(--spacing) * 3);
 .gap-4 {
 gap: calc(var(--spacing) * 4);
 }
+.gap-5 {
+gap: calc(var(--spacing) * 5);
+}
 :where(.space-y-0\.5 > :not(:last-child)) {
 --tw-space-y-reverse: 0;
 margin-block-start: calc(calc(var(--spacing) * 0.5) * var(--tw-space-y-reverse));
@@ -856,6 +879,12 @@ border-radius: var(--radius-xl);
 border-bottom-right-radius: 0;
 border-bottom-left-radius: 0;
 }
+.rounded-br-sm {
+border-bottom-right-radius: var(--radius-sm);
+}
+.rounded-bl-sm {
+border-bottom-left-radius: var(--radius-sm);
+}
 .border {
 border-style: var(--tw-border-style);
 border-width: 1px;
@@ -901,6 +930,9 @@ border-color: var(--np-brand);
 }
 .border-\[var\(--np-line\)\] {
 border-color: var(--np-line);
+}
+.border-brand {
+border-color: var(--np-brand);
 }
 .border-line {
 border-color: var(--np-line);
@@ -1109,6 +1141,9 @@ padding-top: calc(var(--spacing) * 5);
 .pr-2 {
 padding-right: calc(var(--spacing) * 2);
 }
+.pr-3 {
+padding-right: calc(var(--spacing) * 3);
+}
 .pr-5 {
 padding-right: calc(var(--spacing) * 5);
 }
@@ -1147,6 +1182,9 @@ text-align: start;
 }
 .align-\[-3px\] {
 vertical-align: -3px;
+}
+.align-top {
+vertical-align: top;
 }
 .font-mono {
 font-family: var(--font-mono);
@@ -1216,6 +1254,12 @@ overflow-wrap: break-word;
 }
 .break-all {
 word-break: break-all;
+}
+.whitespace-nowrap {
+white-space: nowrap;
+}
+.whitespace-pre-line {
+white-space: pre-line;
 }
 .whitespace-pre-wrap {
 white-space: pre-wrap;
@@ -1443,8 +1487,14 @@ grid-template-columns: repeat(4, minmax(0, 1fr));
 .sm\:grid-cols-5 {
 grid-template-columns: repeat(5, minmax(0, 1fr));
 }
+.sm\:grid-cols-6 {
+grid-template-columns: repeat(6, minmax(0, 1fr));
+}
 .sm\:grid-cols-\[1fr_1fr_auto_auto\] {
 grid-template-columns: 1fr 1fr auto auto;
+}
+.sm\:grid-cols-\[1fr_11rem\] {
+grid-template-columns: 1fr 11rem;
 }
 .sm\:grid-cols-\[1fr_auto\] {
 grid-template-columns: 1fr auto;
@@ -1497,6 +1547,12 @@ opacity: 100%;
 }
 }
 @media (width >= 48rem) {
+.md\:sticky {
+position: sticky;
+}
+.md\:top-0 {
+top: 0px;
+}
 .md\:inline {
 display: inline;
 }
@@ -1505,6 +1561,12 @@ grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .md\:grid-cols-4 {
 grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.md\:grid-cols-\[1fr_17rem\] {
+grid-template-columns: 1fr 17rem;
+}
+.md\:self-start {
+align-self: flex-start;
 }
 }
 @media (width >= 64rem) {
@@ -1801,7 +1863,7 @@ background-repeat: no-repeat;
 background-position: right .6rem center;
 background-size: 1rem;
 }
-.checkbox {
+.checkbox, .radio {
 width: 1.05rem;
 height: 1.05rem;
 accent-color: var(--np-brand);

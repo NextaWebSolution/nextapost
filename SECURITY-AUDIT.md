@@ -202,3 +202,24 @@ Found during the 2.0.1 QA pass and fixed in 2.0.1:
 | 14 | Low | Pages didn't carry LiteSpeed's own no-cache header; a server-level cache rule could store a signed-in page with a stale form token | `src/Core/Response.php` | `X-LiteSpeed-Cache-Control: no-cache` on every page | `tests/qa_fixes_201.py` |
 
 The test database now refuses any value longer than its MySQL column (strict-mode emulation), so the integration suite catches MySQL-only failures. The verdict is unchanged: **SAFE WITH CONDITIONS**.
+
+---
+
+## Addendum — 2.1.0 Comment-to-DM flows (27 Nov 2026)
+
+The new optional module was reviewed and tested before release. It is **off by default**; while off, its pages, the webhook and the tracked links answer 404, and no Meta messaging permission is requested.
+
+| Area | Control | Verified by |
+|---|---|---|
+| Webhook authenticity | Every POST must carry `X-Hub-Signature-256`, an HMAC-SHA256 of the exact body with your Meta app secret (Instagram or Facebook app); compared in constant time. Unsigned, forged or re-signed-with-another-key requests get 403 | `dm_suite`, `e2e_dm` |
+| Webhook verification | The GET handshake needs the random verify token (constant-time compare) and only echoes a plain challenge (`[A-Za-z0-9_-]`), so it can't reflect markup | `e2e_dm` |
+| Abuse of the endpoint | Bodies over 1 MB are refused (413); malformed JSON 400; unknown accounts, unknown objects and malformed entries are ignored; Meta's repeat deliveries are de-duplicated per comment | `dm_suite`, `e2e_dm` |
+| Button taps (postbacks) | The payload names an event by random UUID; it's acted on only if it belongs to one of the account's channels **and** the tapper is the person who commented. Anyone else's tap is ignored | `dm_suite` |
+| Loops | The account's own comments (including its public replies) never trigger a flow | `dm_suite` |
+| Permissions | Admins and editors manage flows; only admins see the Meta setup and can subscribe accounts; contributors, approvers and viewers get 403; other workspaces 404; every write needs the CSRF token | `e2e_dm`, `qa_writes`, crawl per role |
+| Links | Only `http(s)` links can be saved; the tracked `/go/<uuid>` link only forwards to the flow's saved address (no open redirect) | `dm_suite`, `e2e_dm` |
+| Tokens | Channel tokens stay encrypted; Meta calls send them in an `Authorization` header, never in the URL | `dm_suite` |
+| Meta's limits | One private reply per comment, within 7 days; at most `DM_PRIVATE_REPLIES_PER_HOUR` (default 700 of Meta's 750) per account per hour, the rest queued; each event is claimed atomically so the webhook and cron never send twice | `dm_suite` |
+| Personal data | Commenters' names and comments are stored only for matching comments, shown only to the workspace, and deleted after 90 days; deleting a channel or flow deletes its activity | `dm_suite` |
+
+No issues found. The overall verdict is unchanged: **SAFE WITH CONDITIONS**. The extra condition for this module: test one real flow on your own account after adding the webhook in your Meta app (a live Meta delivery can't be exercised here).

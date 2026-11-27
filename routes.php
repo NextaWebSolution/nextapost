@@ -119,6 +119,16 @@ $r->get('/w/{ws}/media-sources/{source}/connect', [App\Controllers\MediaSourceCo
 $r->post('/w/{ws}/media-sources/{source}/disconnect', [App\Controllers\MediaSourceController::class, 'disconnect']);
 $r->get('/media-sources/{source}/callback', [App\Controllers\MediaSourceController::class, 'callback']);
 // Repurpose rules
+// Comment-to-DM flows (optional module; every route answers 404 while it is off)
+$r->get('/w/{ws}/automations', [App\Controllers\AutomationController::class, 'index']);
+$r->post('/w/{ws}/automations', [App\Controllers\AutomationController::class, 'store']);
+$r->post('/w/{ws}/automations/channels/{channel}/connect', [App\Controllers\AutomationController::class, 'connect']);
+$r->get('/w/{ws}/automations/channels/{channel}/posts', [App\Controllers\AutomationController::class, 'posts']);
+$r->post('/w/{ws}/automations/{id}', [App\Controllers\AutomationController::class, 'update']);
+$r->post('/w/{ws}/automations/{id}/status', [App\Controllers\AutomationController::class, 'status']);
+$r->post('/w/{ws}/automations/{id}/delete', [App\Controllers\AutomationController::class, 'delete']);
+$r->get('/w/{ws}/automations/{id}/activity', [App\Controllers\AutomationController::class, 'activity']);
+$r->get('/go/{id}', [App\Controllers\AutomationController::class, 'go']);
 $r->get('/w/{ws}/repurpose', [App\Controllers\RepurposeController::class, 'index']);
 $r->post('/w/{ws}/repurpose', [App\Controllers\RepurposeController::class, 'store']);
 $r->post('/w/{ws}/repurpose/{id}/status', [App\Controllers\RepurposeController::class, 'status']);

@@ -49,6 +49,7 @@ $theme = $user['theme'] ?? 'system';
   <a class="nav-link" href="<?= e(url($base . '/library')) ?>"<?= $cur($base . '/library') ?>><?= icon('tag') ?> <?= e(__('Labels & templates')) ?></a>
   <a class="nav-link" href="<?= e(url($base . '/channels')) ?>"<?= $cur($base . '/channels') ?>><?= icon('plug') ?> <?= e(__('Channels')) ?></a>
   <a class="nav-link" href="<?= e(url($base . '/repurpose')) ?>"<?= $cur($base . '/repurpose') ?>><?= icon('repeat') ?> <?= e(__('Repurpose')) ?></a>
+  <?php if (\App\Services\CommentDmService::enabled() && \App\Core\Gate::can((string) $role, 'automations', $ws)): ?><a class="nav-link" href="<?= e(url($base . '/automations')) ?>"<?= $cur($base . '/automations') ?>><?= icon('message') ?> <?= e(__('Comment-to-DM')) ?></a><?php endif; ?>
   <a class="nav-link" href="<?= e(url($base . '/settings')) ?>"<?= $cur($base . '/settings') ?>><?= icon('users') ?> <?= e(__('Team & settings')) ?></a>
   <a class="nav-link" href="<?= e(url($base . '/developers')) ?>"<?= $cur($base . '/developers') ?>><?= icon('key') ?> <?= e(__('Developers & AI')) ?></a>
   <?php if (!empty($user['is_super_admin'])): ?>

@@ -12,6 +12,11 @@ $tab = isset($tabs[$tab]) ? $tab : 'general';
     <?= csrf_field() ?>
     <div><label class="label" for="app_name"><?= e(__('Product name')) ?></label><input id="app_name" name="app_name" class="input" maxlength="60" value="<?= e($general['app_name']) ?>"><p class="help"><?= e(__('Shown in the sidebar, emails and browser tab — white-label it for your agency.')) ?></p></div>
     <label class="flex items-start gap-3"><input type="checkbox" class="checkbox mt-0.5" name="allow_registration" value="1" <?= $general['allow_registration'] ? 'checked' : '' ?>><span><span class="text-sm font-medium"><?= e(__('Allow public sign-ups')) ?></span><span class="block text-xs text-muted"><?= e(__('Anyone can create an account and their own workspace. Leave off to add people by invite only.')) ?></span></span></label>
+    <fieldset class="border-t border-line pt-4">
+      <legend class="text-sm font-semibold"><?= e(__('Optional features')) ?></legend>
+      <p class="help mt-0"><?= e(__('Turned-off features are hidden everywhere, for everyone.')) ?></p>
+      <label class="mt-3 flex items-start gap-3"><input type="checkbox" class="checkbox mt-0.5" name="comment_dm" value="1" <?= $general['comment_dm'] ? 'checked' : '' ?>><span><span class="text-sm font-medium"><?= e(__('Comment-to-DM flows')) ?></span><span class="block text-xs text-muted"><?= e(__('When someone comments a keyword on your Instagram or Facebook post, reply to them and send the link by DM, optionally only after they follow you. Needs your own Meta app with messaging access.')) ?></span></span></label>
+    </fieldset>
     <div class="flex justify-end"><button class="btn btn-primary"><?= e(__('Save')) ?></button></div>
   </form>
 

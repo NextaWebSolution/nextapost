@@ -8,7 +8,7 @@
 
 Built with plain **PHP 8 + MySQL + Tailwind CSS + Alpine.js**. No Docker, Node.js, Redis or monthly SaaS fees.
 
-[![Version](https://img.shields.io/badge/version-2.0.0-7c3aed?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.1.0-7c3aed?style=flat-square)](CHANGELOG.md)
 [![PHP](https://img.shields.io/badge/PHP-8.1%2B-777bb4?style=flat-square&logo=php&logoColor=white)](#requirements)
 [![MySQL](https://img.shields.io/badge/MySQL-5.7%2B%20%7C%20MariaDB-4479a1?style=flat-square&logo=mysql&logoColor=white)](#requirements)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)](#development)
@@ -60,6 +60,7 @@ NextaPost runs on any cPanel host with PHP 8.1+ and MySQL. For the smoothest set
 | **Posting times & queue** | Weekly posting times per channel with suggested times; "Add to queue" gives each channel its next free slot. Recurring posts (daily, weekly, monthly, yearly) |
 | **Ideas & feeds** | Ideas board with columns and drag and drop, "turn into post", and an inbox of new articles from RSS, Atom and JSON feeds that can become ideas automatically |
 | **Repurpose** | New Instagram or Threads posts are copied to the channels you choose, e.g. every Reel to TikTok, YouTube Shorts and Facebook |
+| **Comment-to-DM flows** *(optional, off by default)* | Someone comments a keyword on your Instagram or Facebook post: NextaPost replies under the comment, sends them a DM with a button, can check that they follow you, then sends your link. Tracked clicks, activity log, viral-post queue that respects Meta's limits. Uses Meta's official API; no per-contact fees |
 | **Labels, signatures & templates** | Colour-code posts by campaign or client and filter the calendar; reusable hashtag/CTA blocks; templates for posts you write every week |
 | **Team notes** | Comments on each post with @mentions and email notifications |
 | **Analytics** | Likes, comments, shares and views fetched for 30 days after publishing, shown per channel |
@@ -239,6 +240,28 @@ Every workspace has a **Developers & AI** page.
 
 The full reference for all 57 operations, the endpoints and webhook signatures is in **[docs/API.md](docs/API.md)**.
 
+## Comment-to-DM flows (optional)
+
+The “comment LINK and I'll DM you” automation, built in. It is **off by default** and hidden everywhere until a super admin turns it on in **System → General → Optional features**.
+
+**How a flow runs:** someone comments your keyword → NextaPost posts a public reply under the comment (picked at random from your list) → sends them a DM with a button → when they tap it, Instagram checks whether they follow you (optional; if not, they get a *Visit profile* and an *I'm following* button) → they get your link as a button. Clicks are counted. Each person gets a flow once, and a flow can listen to all posts or only the posts you pick.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/comment-dm-dark.png">
+  <img src="docs/screenshots/comment-dm-light.png" alt="NextaPost Comment-to-DM flow editor: keyword trigger, random public replies, first DM with a button, Instagram follow check and the link, with a live DM preview" width="100%">
+</picture>
+
+**Setup (once):**
+
+1. Turn the feature on in **System → General**.
+2. In your Meta app (the same one you use to connect Instagram/Facebook), open **Webhooks** and add the *Callback URL* and *Verify token* shown on the **Comment-to-DM** page. Subscribe to `comments`, `messages`, `messaging_postbacks` (Instagram) and `feed`, `messages`, `messaging_postbacks` (Facebook Page).
+3. Reconnect each Instagram account or Facebook Page in **Channels**, so it grants the messaging permission (`instagram_business_manage_messages`, or `instagram_manage_messages` / `pages_messaging` with Facebook Login). The extra permissions are only requested while the feature is on.
+4. On the **Comment-to-DM** page, press **Turn on DMs** for each account, then create a flow.
+
+**Meta's rules, which NextaPost follows:** one private reply per comment, within 7 days; up to 750 private replies an hour per account (NextaPost queues above 700, so a viral post never gets dropped); the follow check only works after the person taps a button, which is why the button step comes first. Facebook Pages have no follow check. For an app that only serves accounts you own or manage, Meta's *Standard Access* is enough and no App Review is needed; agencies connecting client accounts need *Advanced Access* (App Review and business verification). Your site must be on HTTPS so Meta can deliver webhooks. Optional `.env` setting: `DM_PRIVATE_REPLIES_PER_HOUR` (default 700).
+
+Activity (names and comments of the people who commented) is kept for 90 days.
+
 ## Languages
 
 Each person chooses their language under **Your account**: English, हिन्दी (Hindi), বাংলা (Bengali), العربية (Arabic, right to left), Deutsch, Ελληνικά, Español, Français, Italiano, 日本語, 한국어, Nederlands, Polski, Português, Русский, Türkçe, Українська and 简体中文. Hindi and Bengali are complete. The other languages cover the screens you use every day; rarer text shows in English until it is translated.
@@ -265,10 +288,10 @@ Updating by copying the files yourself (File Manager, FTP, git) also works: keep
 GET /api/v1/check?product=nextapost&version=1.1.0&channel=stable&php=8.3.6&site=<hash>&license=<key>
 200 {
   "update_available": true,
-  "version": "1.1.1",
+  "version": "2.1.0",
   "released_at": "2026-11-18",
   "notes": "What's new…",
-  "download_url": "https://updates.example.com/dl/nextapost-1.1.1.zip",
+  "download_url": "https://updates.example.com/dl/nextapost-2.1.0.zip",
   "sha256": "<hex sha256 of the zip>",
   "signature": "<base64 Ed25519 signature of the sha256 hex string>",
   "min_php": "8.1"
@@ -277,9 +300,9 @@ GET /api/v1/check?product=nextapost&version=1.1.0&channel=stable&php=8.3.6&site=
 
 ```bash
 php tools/keygen.php storage/keys            # once; keep update-signing.key secret
-echo 1.1.1 > VERSION
+echo 2.1.0 > VERSION
 php tools/build-release.php --key=storage/keys/update-signing.key --notes="Bug fixes"
-# → dist/nextapost-1.1.1.zip + dist/nextapost-1.1.1.json (serve both from the update server)
+# → dist/nextapost-2.1.0.zip + dist/nextapost-2.1.0.json (serve both from the update server)
 ```
 
 Schema changes go into `database/migrations/YYYY_MM_DD_NNNNNN_name.sql` (MySQL syntax). They're applied once and tracked in the `migrations` table.
@@ -294,7 +317,7 @@ php bin/console.php migrate
 php bin/console.php create-admin you@example.com 'password' 'Your Name'
 php bin/console.php reset-password you@example.com 'new-password'
 php bin/console.php backup
-php bin/console.php update dist/nextapost-1.1.1.zip
+php bin/console.php update dist/nextapost-2.1.0.zip
 ```
 
 ## Development
@@ -305,15 +328,16 @@ npm i tailwindcss@4 && node tools/build-css.mjs
 
 # Local server + tests (SQLite, no network needed)
 php -S 127.0.0.1:8090 -t public tests/router.php
-bash tests/run.sh               # 649 integration + 24 updater checks
+bash tests/run.sh               # 748 integration + 24 updater checks (with MySQL column-length rules)
 python3 tests/e2e.py http://127.0.0.1:8090   # Playwright browser test (needs an installed copy)
 # More browser suites: e2e_v2, e2e_dev, e2e_oauth, e2e_ai, e2e_networks, e2e_repurpose, e2e_ideas,
-# e2e_media_sources, e2e_i18n, plus tests/mcp_client.py (see each file's header for its arguments)
+# e2e_media_sources, e2e_i18n, e2e_dm (Comment-to-DM, start the server with NP_FAKE_META=/tmp/meta.log),
+# plus tests/mcp_client.py and the qa_*.py checks (see each file's header for its arguments)
 python3 tests/e2e_docs.py http://127.0.0.1:8090 deck.pdf   # documents + per-channel media (after adding a Mastodon channel named Masto)
 php tests/security_setup.php > /tmp/sec.json && python3 tests/security_http.py http://127.0.0.1:8090 /tmp/sec.json   # 53 attack simulations
 ```
 
-**Project structure:** `src/Core` (router, DB, sessions, crypto, mailer, translations), `src/Services` (posts, publishing, queue, worker, media, AI, API/MCP, OAuth, webhooks, ideas, feeds, repurpose, updater, backup, installer), `src/Providers` (one class per network), `src/Controllers`, `views/` (PHP templates), `lang/` (interface languages), `public/assets` (compiled CSS, Alpine.js components), `database/` (schema and migrations).
+**Project structure:** `src/Core` (router, DB, sessions, crypto, mailer, translations), `src/Services` (posts, publishing, queue, worker, media, AI, API/MCP, OAuth, webhooks, ideas, feeds, repurpose, comment-to-DM, updater, backup, installer), `src/Providers` (one class per network), `src/Controllers`, `views/` (PHP templates), `lang/` (interface languages), `public/assets` (compiled CSS, Alpine.js components), `database/` (schema and migrations).
 
 **Translations:** interface text is written in English inside `__('…')` (PHP) or `np.t('…')` (JavaScript). After adding text, run `php tools/i18n-extract.php --write` to update `lang/_keys.json` and the browser string list, then add translations to `lang/<code>.php`. `php tools/api-docs.php` regenerates `docs/API.md`.
 
